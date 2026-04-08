@@ -3,18 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  FileEdit, 
-  CloudUpload, 
-  BarChart3, 
-  HelpCircle, 
-  Archive, 
-  Search, 
-  Bell, 
-  Settings, 
-  ChevronDown, 
+import { useState, useRef, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  FileEdit,
+  CloudUpload,
+  BarChart3,
+  HelpCircle,
+  Archive,
+  Search,
+  Bell,
+  Settings,
+  ChevronDown,
   ChevronUp,
   Sparkles,
   FileText,
@@ -37,6 +37,9 @@ import {
   Bot
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { extractContent } from './utils/documentParser';
+import { DocumentViewer } from './components/DocumentViewer';
+import { CitationsRenderer } from './components/CitationsRenderer';
 
 // --- Types ---
 
@@ -54,16 +57,21 @@ interface TimelineDate {
   date: string;
 }
 
+interface Question {
+  id: number;
+  text: string;
+  tag: string;
+}
+
 // --- Components ---
 
 const SidebarItem = ({ icon: Icon, label, active = false }: { icon: any, label: string, active?: boolean }) => (
-  <a 
-    href="#" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-      active 
-        ? 'bg-white shadow-sm text-primary font-semibold' 
+  <a
+    href="#"
+    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${active
+        ? 'bg-white shadow-sm text-primary font-semibold'
         : 'text-slate-500 hover:text-primary hover:bg-white/50'
-    }`}
+      }`}
   >
     <Icon size={20} className={active ? 'text-primary' : 'group-hover:text-primary'} />
     <span className="text-[11px] uppercase tracking-widest font-bold">{label}</span>
@@ -75,9 +83,9 @@ const InputField = ({ label, icon: Icon, value, readOnly = false }: { label: str
     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</label>
     <div className="relative flex items-center">
       {Icon && <Icon size={16} className="absolute left-3 text-slate-400" />}
-      <input 
+      <input
         className={`w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 ${Icon ? 'pl-10' : 'px-4'} pr-4 text-sm text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary/30 outline-none transition-all`}
-        type="text" 
+        type="text"
         defaultValue={value}
         readOnly={readOnly}
       />
@@ -104,6 +112,8 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [activeTarget, setActiveTarget] = useState<{ type: string, value: string | number } | null>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
 
   const [timelines, setTimelines] = useState<TimelineDate[]>([
     { label: "Clarifications Deadline", date: "May 12th, 2026" },
@@ -114,6 +124,12 @@ export default function App() {
     { label: "Final Award Date", date: "June 2nd, 2026" },
   ]);
 
+  const [projectBrief, setProjectBrief] = useState("Seeking an integrated marketing agency for the Southeast Asian launch of 'NutriKid', a fortified chocolate health drink for children aged 5-12. Project includes 360-degree creative development, TVC production, and social media management. Key compliance requirement: Kids Advertising & Claims Review for regional regulatory bodies.");
+  const [aiQuestions, setAiQuestions] = useState<Question[]>([
+    { id: 1, text: "How does your agency ensure compliance with regional 'Children's Food and Beverage Advertising Initiative' (CFBAI) guidelines for SEA?", tag: "COMPLIANCE" },
+    { id: 2, text: "Describe your process for securing 'Child Talent Safety' certifications during TVC production in varied local jurisdictions.", tag: "SAFETY" }
+  ]);
+
   const handleTimelineChange = (index: number, newDate: string) => {
     const updated = [...timelines];
     updated[index].date = newDate;
@@ -121,69 +137,69 @@ export default function App() {
   };
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { 
-      id: 1, 
-      name: "Strategy & Creative Development", 
-      category: "Services", 
-      description: "Launch strategy, audience segmentation, messaging framework, creative territory development and master campaign toolkit for a new kids health drink.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 1,
+      name: "Strategy & Creative Development",
+      category: "Services",
+      description: "Launch strategy, audience segmentation, messaging framework, creative territory development and master campaign toolkit for a new kids health drink.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 2, 
-      name: "TVC Development", 
-      category: "Services", 
-      description: "Development of flagship TV commercial concept and all pre-production creative required for global launch approvals.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 2,
+      name: "TVC Development",
+      category: "Services",
+      description: "Development of flagship TV commercial concept and all pre-production creative required for global launch approvals.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 3, 
-      name: "TVC Production", 
-      category: "Services", 
-      description: "End-to-end TVC shoot, post-production and delivery of master film and cutdowns for paid media use.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 3,
+      name: "TVC Production",
+      category: "Services",
+      description: "End-to-end TVC shoot, post-production and delivery of master film and cutdowns for paid media use.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 4, 
-      name: "Social Organic Content", 
-      category: "Services", 
-      description: "Organic social content strategy, monthly content calendar and asset adaptation for Meta, YouTube and TikTok.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 4,
+      name: "Social Organic Content",
+      category: "Services",
+      description: "Organic social content strategy, monthly content calendar and asset adaptation for Meta, YouTube and TikTok.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 5, 
-      name: "Social Paid Media Planning", 
-      category: "Services", 
-      description: "Paid social and video media planning across Meta, YouTube and TikTok for global launch period.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 5,
+      name: "Social Paid Media Planning",
+      category: "Services",
+      description: "Paid social and video media planning across Meta, YouTube and TikTok for global launch period.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 6, 
-      name: "Social Paid Media Buying & Optimization", 
-      category: "Services", 
-      description: "Campaign trafficking, paid media activation, optimization and performance reporting across Meta, YouTube and TikTok.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 6,
+      name: "Social Paid Media Buying & Optimization",
+      category: "Services",
+      description: "Campaign trafficking, paid media activation, optimization and performance reporting across Meta, YouTube and TikTok.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 7, 
-      name: "Kids Advertising & Claims Compliance Review", 
-      category: "Services", 
-      description: "Legal and regulatory review of kids advertising content and product-related claims across launch assets and scripts.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 7,
+      name: "Kids Advertising & Claims Compliance Review",
+      category: "Services",
+      description: "Legal and regulatory review of kids advertising content and product-related claims across launch assets and scripts.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
-    { 
-      id: 8, 
-      name: "Launch Program Management", 
-      category: "Services", 
-      description: "Program management, stakeholder coordination, asset trafficking and master launch governance across all workstreams.", 
-      hsnSac: "8471XX", 
-      uom: "Lot" 
+    {
+      id: 8,
+      name: "Launch Program Management",
+      category: "Services",
+      description: "Program management, stakeholder coordination, asset trafficking and master launch governance across all workstreams.",
+      hsnSac: "8471XX",
+      uom: "Lot"
     },
   ]);
 
@@ -193,9 +209,118 @@ export default function App() {
     setLineItems(updated);
   };
 
-  const handleGenerateAI = () => {
+  const handleGenerateAI = async () => {
+    if (!projectBrief.trim()) return;
     setIsGenerating(true);
-    setTimeout(() => setIsGenerating(false), 1500);
+    try {
+      const OLLAMA_URL = "http://localhost:11434/api/chat";
+      const MODEL_NAME = "kimi-k2-thinking:cloud";
+
+      const prompt = `Based on the following project brief, generate 4 critical procurement questionnaire questions (maximum 2 sentences each) that a vendor must answer. 
+Focus on technical methodology, compliance, and risk management.
+Format the response as a JSON array of objects with keys 'text' and 'tag' (short one-word category).
+
+PROJECT BRIEF:
+${projectBrief}
+
+Example format:
+[
+  {"text": "How do you handle X?", "tag": "TECHNICAL"},
+  ...
+]`;
+
+      const response = await fetch(OLLAMA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false
+        })
+      });
+
+      if (!response.ok) throw new Error("Ollama connection failed");
+
+      const data = await response.json();
+      const content = data.message.content;
+      
+      const jsonMatch = content.match(/\[\s*\{.*\}\s*\]/s);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        setAiQuestions(parsed.map((q: any, i: number) => ({ 
+          id: Date.now() + i, 
+          text: q.text, 
+          tag: q.tag.toUpperCase() 
+        })));
+      }
+    } catch (error) {
+      console.error("AI Generation failed", error);
+      alert("Failed to generate AI questions. Ensure Ollama is running with the correct model.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!uploadedFile) return;
+    setIsAnalyzing(true);
+
+    try {
+      // Step 1: Extract text from document
+      console.log(`Extracting content from ${uploadedFile.name}...`);
+      const documentText = await extractContent(uploadedFile);
+
+      // Step 2: Call Ollama with kimi-k2-thinking:cloud
+      const OLLAMA_URL = "http://localhost:11434/api/chat";
+      const MODEL_NAME = "kimi-k2-thinking:cloud";
+
+      console.log(`Analyzing document with ${MODEL_NAME}...`);
+
+      const prompt = `Analyze the following procurement document (vendor proposal/technical bid). 
+
+IMPORTANT INSTRUCTIONS:
+1. Provide an executive summary of the proposal.
+2. For each of the following Line Items, extract specific points regarding COST, METHODS, and COMPLIANCE STRATEGIES if mentioned:
+${lineItems.map(item => `- ${item.name}: ${item.description}`).join('\n')}
+
+3. Highlight any potential risks or areas requiring clarification.
+
+CITATION RULE:
+Every time you make a statement derived from the document, you MUST cite the source using the appropriate format:
+- PDF: (Page X)
+- PPTX: (Slide X)
+- XLSX: (Sheet "Name")
+- DOCX: (Section X)
+Use the [PAGE: X], [SLIDE: X], [SHEET: X], and [SECTION: X] markers in the text below to identify the sources.
+
+DOCUMENT TEXT:
+${documentText.substring(0, 20000)} 
+`;
+
+      const response = await fetch(OLLAMA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Ollama Error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      setAiAnalysis(data.message.content);
+
+    } catch (error) {
+      console.error("Analysis Error:", error);
+      alert(`AI Analysis Failed: ${error instanceof Error ? error.message : "Unknown error"}\n\nEnsure Ollama is running with OLLAMA_ORIGINS="*" and the model is pulled.`);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -209,9 +334,9 @@ export default function App() {
 
         <div className="flex items-center gap-3 px-3 py-4 bg-white/60 rounded-xl border border-white shadow-sm">
           <div className="w-10 h-10 rounded-lg bg-primary-container/20 flex items-center justify-center overflow-hidden">
-            <img 
-              src="https://picsum.photos/seed/procure/100/100" 
-              alt="Project" 
+            <img
+              src="https://picsum.photos/seed/procure/100/100"
+              alt="Project"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
@@ -253,13 +378,13 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="relative">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search procurement data..." 
+              <input
+                type="text"
+                placeholder="Search procurement data..."
                 className="bg-slate-100 border-none rounded-full px-10 py-2 text-sm w-64 focus:ring-2 focus:ring-primary/20 transition-all outline-none"
               />
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
                 <Bell size={20} />
@@ -271,9 +396,9 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-slate-700">Ava Thompson</span>
                 <div className="w-8 h-8 rounded-full bg-primary-container overflow-hidden">
-                  <img 
-                    src="https://picsum.photos/seed/ava/100/100" 
-                    alt="User" 
+                  <img
+                    src="https://picsum.photos/seed/ava/100/100"
+                    alt="User"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -298,7 +423,7 @@ export default function App() {
                       <p className="text-[10px] text-slate-500 font-medium">Basic RFP details</p>
                     </div>
                   </div>
-                  
+
                   <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <InputField label="Subject" icon={FileText} value="RFQ for global launch marketing services for new kids health drink" />
                     <InputField label="RFP Code" icon={Tag} value="RFQ-MKT-KIDS-GL-2026-001" />
@@ -331,7 +456,7 @@ export default function App() {
                       <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{t.label}</label>
                       <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 group focus-within:border-primary/30 transition-all">
                         <Calendar size={18} className="text-slate-400 group-focus-within:text-primary transition-colors" />
-                        <input 
+                        <input
                           type="text"
                           value={t.date}
                           onChange={(e) => handleTimelineChange(idx, e.target.value)}
@@ -386,7 +511,7 @@ export default function App() {
                 </div>
 
                 <div className="p-6">
-                  <motion.div 
+                  <motion.div
                     animate={{ height: isScopeExpanded ? 'auto' : '150px' }}
                     className="w-full bg-slate-50/50 rounded-xl p-6 border border-slate-100 overflow-hidden relative"
                   >
@@ -406,11 +531,11 @@ export default function App() {
                 </div>
 
                 <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex justify-center">
-                  <button 
+                  <button
                     onClick={() => setIsScopeExpanded(!isScopeExpanded)}
                     className="flex items-center gap-1 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-primary transition-colors"
                   >
-                    {isScopeExpanded ? 'Show Less' : 'Show More'} 
+                    {isScopeExpanded ? 'Show Less' : 'Show More'}
                     {isScopeExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
                 </div>
@@ -421,7 +546,7 @@ export default function App() {
                 <div className="absolute top-0 right-0 p-4 opacity-5">
                   <Sparkles size={120} className="text-primary" />
                 </div>
-                
+
                 <div className="flex items-center gap-3 mb-6">
                   <div className="bg-primary/10 p-2 rounded-xl">
                     <Bot size={24} className="text-primary" />
@@ -433,19 +558,20 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4 relative z-10">
-                  <textarea 
+                  <textarea
                     className="w-full h-32 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 focus:border-primary/30 outline-none resize-none transition-all"
                     placeholder="Paste your project brief here..."
-                    defaultValue="Seeking an integrated marketing agency for the Southeast Asian launch of 'NutriKid', a fortified chocolate health drink for children aged 5-12. Project includes 360-degree creative development, TVC production, and social media management. Key compliance requirement: Kids Advertising & Claims Review for regional regulatory bodies."
+                    value={projectBrief}
+                    onChange={(e) => setProjectBrief(e.target.value)}
                   />
                   <div className="flex justify-end">
-                    <button 
+                    <button
                       onClick={handleGenerateAI}
                       disabled={isGenerating}
                       className="flex items-center gap-2 py-4 px-10 bg-primary text-white rounded-full font-bold shadow-xl shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all group disabled:opacity-70"
                     >
                       {isGenerating ? (
-                        <motion.div 
+                        <motion.div
                           animate={{ rotate: 360 }}
                           transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
                         >
@@ -454,7 +580,7 @@ export default function App() {
                       ) : (
                         <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />
                       )}
-                      {isGenerating ? 'Analyzing...' : 'Generate AI Questionnaires'}
+                      {isGenerating ? 'Generating...' : 'Generate AI Questionnaires'}
                     </button>
                   </div>
                 </div>
@@ -468,24 +594,22 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="glass-ai p-6 rounded-2xl space-y-4 group hover:bg-primary/[0.08] transition-all cursor-pointer">
-                      <p className="text-sm font-bold text-slate-800 leading-relaxed">How does your agency ensure compliance with regional 'Children's Food and Beverage Advertising Initiative' (CFBAI) guidelines for SEA?</p>
-                      <div className="flex items-center gap-3">
-                        <span className="bg-primary/20 text-primary text-[9px] px-2.5 py-1 rounded-md font-black tracking-widest">COMPLIANCE</span>
-                        <span className="text-[10px] text-slate-500 flex items-center gap-1.5 font-medium">
-                          <BookOpen size={12} /> Source Evidence
-                        </span>
-                      </div>
-                    </div>
-                    <div className="glass-ai p-6 rounded-2xl space-y-4 group hover:bg-primary/[0.08] transition-all cursor-pointer">
-                      <p className="text-sm font-bold text-slate-800 leading-relaxed">Describe your process for securing 'Child Talent Safety' certifications during TVC production in varied local jurisdictions.</p>
-                      <div className="flex items-center gap-3">
-                        <span className="bg-primary/20 text-primary text-[9px] px-2.5 py-1 rounded-md font-black tracking-widest">SAFETY</span>
-                        <span className="text-[10px] text-slate-500 flex items-center gap-1.5 font-medium">
-                          <BookOpen size={12} /> Source Evidence
-                        </span>
-                      </div>
-                    </div>
+                    {aiQuestions.map((q) => (
+                      <motion.div 
+                        key={q.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="glass-ai p-6 rounded-2xl space-y-4 group hover:bg-primary/[0.08] transition-all cursor-pointer"
+                      >
+                        <p className="text-sm font-bold text-slate-800 leading-relaxed">{q.text}</p>
+                        <div className="flex items-center gap-3">
+                          <span className="bg-primary/20 text-primary text-[9px] px-2.5 py-1 rounded-md font-black tracking-widest">{q.tag}</span>
+                          <span className="text-[10px] text-slate-500 flex items-center gap-1.5 font-medium">
+                            <BookOpen size={12} /> Source Evidence
+                          </span>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
                 </div>
               </section>
@@ -522,7 +646,7 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="relative">
-                              <select 
+                              <select
                                 value={item.category}
                                 onChange={(e) => handleLineItemChange(idx, 'category', e.target.value)}
                                 className="w-full appearance-none bg-transparent border-none p-0 text-slate-600 font-medium focus:ring-0 outline-none cursor-pointer pr-6"
@@ -540,7 +664,7 @@ export default function App() {
                           <td className="px-6 py-4 text-xs font-mono text-slate-500">{item.hsnSac}</td>
                           <td className="px-6 py-4">
                             <div className="relative">
-                              <select 
+                              <select
                                 value={item.uom}
                                 onChange={(e) => handleLineItemChange(idx, 'uom', e.target.value)}
                                 className="w-full appearance-none bg-transparent border-none p-0 text-xs font-bold text-slate-600 focus:ring-0 outline-none cursor-pointer pr-6"
@@ -567,7 +691,7 @@ export default function App() {
                 <button className="px-10 py-4 rounded-full text-slate-500 font-bold hover:bg-slate-200 transition-all text-sm uppercase tracking-widest">
                   Save Draft
                 </button>
-                <button 
+                <button
                   onClick={() => setCurrentStep('Vendor')}
                   className="px-12 py-4 bg-primary text-white rounded-full font-bold shadow-xl shadow-primary/30 hover:bg-primary-dim hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 text-sm uppercase tracking-widest"
                 >
@@ -600,21 +724,22 @@ export default function App() {
                         </p>
                         <p className="text-xs text-slate-400 uppercase tracking-widest font-black">PDF, DOCX, or XLSX (MAX. 10MB)</p>
                       </div>
-                      <input 
-                        type="file" 
-                        className="hidden" 
+                      <input
+                        type="file"
+                        className="hidden"
                         onChange={(e) => {
                           if (e.target.files?.[0]) {
                             setUploadedFile(e.target.files[0]);
                             setAiAnalysis(null);
+                            setActiveTarget(null);
                           }
-                        }} 
+                        }}
                       />
                     </label>
                   </div>
 
                   {uploadedFile && (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm"
@@ -628,7 +753,7 @@ export default function App() {
                           <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                         </div>
                       </div>
-                      <button 
+                      <button
                         onClick={() => setUploadedFile(null)}
                         className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                       >
@@ -639,36 +764,13 @@ export default function App() {
 
                   {uploadedFile && (
                     <div className="pt-8">
-                      <button 
-                        onClick={() => {
-                          setIsAnalyzing(true);
-                          // Simulating AI Analysis with kimi-k2-thinking:cloud via Ollama
-                          setTimeout(() => {
-                            setIsAnalyzing(false);
-                            setAiAnalysis(`### AI Analysis Report - ${uploadedFile.name}
-**Model:** kimi-k2-thinking:cloud (via Ollama)
-
-#### Executive Summary
-The vendor proposal demonstrates a high level of technical competence in digital marketing and video production. They have addressed all 8 RFQ line items with specific deliverables.
-
-#### Key Strengths
-- **Regional Expertise:** Strong track record in SEA markets, particularly in compliance for kids' advertising.
-- **Integrated Approach:** Seamless transition between strategy and execution.
-- **Cost Efficiency:** Competitive pricing for TVC production with clear breakdown of pass-through costs.
-
-#### Potential Risks
-- **Timeline:** The proposed schedule for TVC production is tight (4 weeks vs 6 weeks recommended).
-- **Resource Allocation:** Heavy reliance on a single creative director for both strategy and TVC development.
-
-#### Recommendation
-Proceed to technical interview with a focus on resource redundancy and timeline buffer management.`);
-                          }, 3000);
-                        }}
+                      <button
+                        onClick={handleAnalyze}
                         disabled={isAnalyzing}
-                        className="px-12 py-5 bg-gradient-to-r from-primary to-primary-dim text-white rounded-full font-black shadow-2xl shadow-primary/40 hover:scale-[1.05] active:scale-95 transition-all flex items-center gap-4 mx-auto disabled:opacity-70"
+                        className="px-12 py-5 bg-primary text-white rounded-full font-black shadow-2xl shadow-primary/40 hover:scale-[1.05] active:scale-95 transition-all flex items-center gap-4 mx-auto disabled:opacity-70"
                       >
                         {isAnalyzing ? (
-                          <motion.div 
+                          <motion.div
                             animate={{ rotate: 360 }}
                             transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
                           >
@@ -677,7 +779,7 @@ Proceed to technical interview with a focus on resource redundancy and timeline 
                         ) : (
                           <Bot size={24} />
                         )}
-                        {isAnalyzing ? 'Analyzing with Kimi AI...' : 'Analyze with AI'}
+                        {isAnalyzing ? 'Analyzing with AI...' : 'Analyze with AI'}
                       </button>
                     </div>
                   )}
@@ -685,7 +787,7 @@ Proceed to technical interview with a focus on resource redundancy and timeline 
               </section>
 
               {aiAnalysis && (
-                <motion.section 
+                <motion.section
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   className="bg-slate-900 rounded-3xl p-12 text-white shadow-2xl relative overflow-hidden"
@@ -693,7 +795,7 @@ Proceed to technical interview with a focus on resource redundancy and timeline 
                   <div className="absolute top-0 right-0 p-8 opacity-10">
                     <Sparkles size={160} className="text-primary" />
                   </div>
-                  
+
                   <div className="flex items-center gap-4 mb-8">
                     <div className="bg-primary/20 p-3 rounded-2xl">
                       <Bot size={32} className="text-primary" />
@@ -704,9 +806,25 @@ Proceed to technical interview with a focus on resource redundancy and timeline 
                     </div>
                   </div>
 
-                  <div className="prose prose-invert max-w-none text-slate-300 space-y-6">
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-8 leading-relaxed whitespace-pre-wrap font-sans text-sm">
-                      {aiAnalysis}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-[600px]">
+                    {/* Left Side: AI Report */}
+                    <div className="prose prose-invert max-w-none text-slate-300 space-y-6 overflow-y-auto max-h-[800px] pr-4 custom-scrollbar">
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-8 leading-relaxed font-sans text-sm">
+                        <CitationsRenderer 
+                          content={aiAnalysis} 
+                          onCitationClick={(target) => setActiveTarget(target)} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Side: Document Preview */}
+                    <div className="h-[800px]">
+                      {uploadedFile && (
+                        <DocumentViewer 
+                          file={uploadedFile} 
+                          activeTarget={activeTarget} 
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -722,7 +840,7 @@ Proceed to technical interview with a focus on resource redundancy and timeline 
               )}
 
               <div className="flex justify-start py-8">
-                <button 
+                <button
                   onClick={() => setCurrentStep('RFQ')}
                   className="flex items-center gap-2 text-slate-500 font-bold hover:text-primary transition-all text-sm uppercase tracking-widest"
                 >
@@ -736,7 +854,7 @@ Proceed to technical interview with a focus on resource redundancy and timeline 
       </main>
 
       {/* Floating AI Action */}
-      <motion.button 
+      <motion.button
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-tr from-primary to-primary-container text-white rounded-full shadow-2xl flex items-center justify-center z-50 group"
