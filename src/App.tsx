@@ -4,17 +4,17 @@
  */
 
 import { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  FileEdit, 
-  CloudUpload, 
-  BarChart3, 
-  HelpCircle, 
-  Archive, 
-  Search, 
-  Bell, 
-  Settings, 
-  ChevronDown, 
+import {
+  LayoutDashboard,
+  FileEdit,
+  CloudUpload,
+  BarChart3,
+  HelpCircle,
+  Archive,
+  Search,
+  Bell,
+  Settings,
+  ChevronDown,
   ChevronUp,
   Sparkles,
   FileText,
@@ -57,13 +57,12 @@ interface TimelineDate {
 // --- Components ---
 
 const SidebarItem = ({ icon: Icon, label, active = false }: { icon: any, label: string, active?: boolean }) => (
-  <a 
-    href="#" 
-    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-      active 
-        ? 'bg-white shadow-sm text-primary font-semibold' 
-        : 'text-slate-500 hover:text-primary hover:bg-white/50'
-    }`}
+  <a
+    href="#"
+    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${active
+      ? 'bg-white shadow-sm text-primary font-semibold'
+      : 'text-slate-500 hover:text-primary hover:bg-white/50'
+      }`}
   >
     <Icon size={20} className={active ? 'text-primary' : 'group-hover:text-primary'} />
     <span className="text-[11px] uppercase tracking-widest font-bold">{label}</span>
@@ -75,9 +74,9 @@ const InputField = ({ label, icon: Icon, value, readOnly = false }: { label: str
     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</label>
     <div className="relative flex items-center">
       {Icon && <Icon size={16} className="absolute left-3 text-slate-400" />}
-      <input 
+      <input
         className={`w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 ${Icon ? 'pl-10' : 'px-4'} pr-4 text-sm text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary/30 outline-none transition-all`}
-        type="text" 
+        type="text"
         defaultValue={value}
         readOnly={readOnly}
       />
@@ -100,6 +99,12 @@ const SelectField = ({ label, options, defaultValue }: { label: string, options:
 export default function App() {
   const [isScopeExpanded, setIsScopeExpanded] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [sowInput, setSowInput] = useState("Seeking an integrated marketing agency for the Southeast Asian launch of 'NutriKid', a fortified chocolate health drink for children aged 5-12. Project includes 360-degree creative development, TVC production, and social media management. Key compliance requirement: Kids Advertising & Claims Review for regional regulatory bodies.");
+
+  const [questions, setQuestions] = useState<any[]>([
+    { id: 1, text: "How does your agency ensure compliance with regional 'Children's Food and Beverage Advertising Initiative' (CFBAI) guidelines for SEA?", category: "COMPLIANCE" },
+    { id: 2, text: "Describe your process for securing 'Child Talent Safety' certifications during TVC production in varied local jurisdictions.", category: "SAFETY" }
+  ]);
 
   const [timelines, setTimelines] = useState<TimelineDate[]>([
     { label: "Clarifications Deadline", date: "May 12th, 2026" },
@@ -127,9 +132,73 @@ export default function App() {
     { id: 8, name: "Launch Program Management", category: "Project Mgmt", description: "Overall coordination...", hsnSac: "998317", uom: "Fixed Fee" },
   ];
 
-  const handleGenerateAI = () => {
+  const handleGenerateAI = async () => {
     setIsGenerating(true);
-    setTimeout(() => setIsGenerating(false), 1500);
+
+    const OLLAMA_URL = "http://localhost:11434/api/chat";
+    const MODEL_NAME = "kimi-k2-thinking:cloud";
+
+    try {
+      // Step 1: Generate Summary using Kimi K2-thinking:cloud via Ollama
+      console.log(`Phase 1: Generating summary with ${MODEL_NAME}...`);
+      const summaryResponse = await fetch(OLLAMA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [{ role: 'user', content: `Summarize the following Scope of Work for a procurement RFQ. Focus on key deliverables and compliance requirements:\n\n${sowInput}` }],
+          stream: false
+        })
+      });
+
+      if (!summaryResponse.ok) {
+        const errorText = await summaryResponse.text();
+        throw new Error(`Failed to connect to Ollama (Phase 1). Status: ${summaryResponse.status}. Details: ${errorText}`);
+      }
+      const summaryData = await summaryResponse.json();
+      const summary = summaryData.message.content;
+
+      // Step 2: Generate Questions from Summary
+      console.log(`Phase 2: Generating questions from summary with ${MODEL_NAME}...`);
+      const questionsResponse = await fetch(OLLAMA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [{
+            role: 'user',
+            content: `Based on the following summary of a Scope of Work, generate 4 specific compliance or technical questions for vendors. Return ONLY a valid JSON array of objects with "text" and "category" fields (e.g., [{"text": "...", "category": "..."}]):\n\n${summary}`
+          }],
+          stream: false
+        })
+      });
+
+      if (!questionsResponse.ok) {
+        const errorText = await questionsResponse.text();
+        throw new Error(`Failed to generate questions (Phase 2). Status: ${questionsResponse.status}. Details: ${errorText}`);
+      }
+      const questionsData = await questionsResponse.json();
+
+      try {
+        // Find JSON block if model includes conversational text
+        const jsonMatch = questionsData.message.content.match(/\[.*\]/s);
+        const parsedQuestions = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+
+        setQuestions(parsedQuestions.map((q: any, i: number) => ({
+          id: Date.now() + i,
+          text: q.text,
+          category: q.category?.toUpperCase() || "GENERAL"
+        })));
+      } catch (parseError) {
+        console.error("JSON Parse Error:", parseError);
+        // Fallback or show original message
+      }
+
+      console.error("AI Generation Error:", error);
+      alert(`Error: ${error instanceof Error ? error.message : "AI Generation failed."}\n\nPlease check:\n1. Ollama is running.\n2. Model '${MODEL_NAME}' is pulled (ollama pull ${MODEL_NAME}).\n3. OLLAMA_ORIGINS is set to "*" to allow CORS.`);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -143,9 +212,9 @@ export default function App() {
 
         <div className="flex items-center gap-3 px-3 py-4 bg-white/60 rounded-xl border border-white shadow-sm">
           <div className="w-10 h-10 rounded-lg bg-primary-container/20 flex items-center justify-center overflow-hidden">
-            <img 
-              src="https://picsum.photos/seed/procure/100/100" 
-              alt="Project" 
+            <img
+              src="https://picsum.photos/seed/procure/100/100"
+              alt="Project"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
@@ -183,13 +252,13 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="relative">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search procurement data..." 
+              <input
+                type="text"
+                placeholder="Search procurement data..."
                 className="bg-slate-100 border-none rounded-full px-10 py-2 text-sm w-64 focus:ring-2 focus:ring-primary/20 transition-all outline-none"
               />
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
                 <Bell size={20} />
@@ -201,9 +270,9 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-slate-700">Ava Thompson</span>
                 <div className="w-8 h-8 rounded-full bg-primary-container overflow-hidden">
-                  <img 
-                    src="https://picsum.photos/seed/ava/100/100" 
-                    alt="User" 
+                  <img
+                    src="https://picsum.photos/seed/ava/100/100"
+                    alt="User"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -226,7 +295,7 @@ export default function App() {
                   <p className="text-[10px] text-slate-500 font-medium">Basic RFP details</p>
                 </div>
               </div>
-              
+
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <InputField label="Subject" icon={FileText} value="RFQ for global launch marketing services for new kids health drink" />
                 <InputField label="RFP Code" icon={Tag} value="RFQ-MKT-KIDS-GL-2026-001" />
@@ -259,7 +328,7 @@ export default function App() {
                   <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{t.label}</label>
                   <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 group focus-within:border-primary/30 transition-all">
                     <Calendar size={18} className="text-slate-400 group-focus-within:text-primary transition-colors" />
-                    <input 
+                    <input
                       type="text"
                       value={t.date}
                       onChange={(e) => handleTimelineChange(idx, e.target.value)}
@@ -314,7 +383,7 @@ export default function App() {
             </div>
 
             <div className="p-6">
-              <motion.div 
+              <motion.div
                 animate={{ height: isScopeExpanded ? 'auto' : '150px' }}
                 className="w-full bg-slate-50/50 rounded-xl p-6 border border-slate-100 overflow-hidden relative"
               >
@@ -331,11 +400,11 @@ export default function App() {
             </div>
 
             <div className="p-4 border-t border-slate-100 bg-slate-50/30 flex justify-center">
-              <button 
+              <button
                 onClick={() => setIsScopeExpanded(!isScopeExpanded)}
                 className="flex items-center gap-1 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-primary transition-colors"
               >
-                {isScopeExpanded ? 'Show Less' : 'Show More'} 
+                {isScopeExpanded ? 'Show Less' : 'Show More'}
                 {isScopeExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             </div>
@@ -346,7 +415,7 @@ export default function App() {
             <div className="absolute top-0 right-0 p-4 opacity-5">
               <Sparkles size={120} className="text-primary" />
             </div>
-            
+
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-primary/10 p-2 rounded-xl">
                 <Bot size={24} className="text-primary" />
@@ -358,19 +427,20 @@ export default function App() {
             </div>
 
             <div className="space-y-4 relative z-10">
-              <textarea 
+              <textarea
                 className="w-full h-32 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 focus:border-primary/30 outline-none resize-none transition-all"
                 placeholder="Paste your project brief here..."
-                defaultValue="Seeking an integrated marketing agency for the Southeast Asian launch of 'NutriKid', a fortified chocolate health drink for children aged 5-12. Project includes 360-degree creative development, TVC production, and social media management. Key compliance requirement: Kids Advertising & Claims Review for regional regulatory bodies."
+                value={sowInput}
+                onChange={(e) => setSowInput(e.target.value)}
               />
               <div className="flex justify-end">
-                <button 
+                <button
                   onClick={handleGenerateAI}
                   disabled={isGenerating}
                   className="flex items-center gap-2 py-4 px-10 bg-primary text-white rounded-full font-bold shadow-xl shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all group disabled:opacity-70"
                 >
                   {isGenerating ? (
-                    <motion.div 
+                    <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
                     >
@@ -393,24 +463,26 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="glass-ai p-6 rounded-2xl space-y-4 group hover:bg-primary/[0.08] transition-all cursor-pointer">
-                  <p className="text-sm font-bold text-slate-800 leading-relaxed">How does your agency ensure compliance with regional 'Children's Food and Beverage Advertising Initiative' (CFBAI) guidelines for SEA?</p>
-                  <div className="flex items-center gap-3">
-                    <span className="bg-primary/20 text-primary text-[9px] px-2.5 py-1 rounded-md font-black tracking-widest">COMPLIANCE</span>
-                    <span className="text-[10px] text-slate-500 flex items-center gap-1.5 font-medium">
-                      <BookOpen size={12} /> Source Evidence
-                    </span>
-                  </div>
-                </div>
-                <div className="glass-ai p-6 rounded-2xl space-y-4 group hover:bg-primary/[0.08] transition-all cursor-pointer">
-                  <p className="text-sm font-bold text-slate-800 leading-relaxed">Describe your process for securing 'Child Talent Safety' certifications during TVC production in varied local jurisdictions.</p>
-                  <div className="flex items-center gap-3">
-                    <span className="bg-primary/20 text-primary text-[9px] px-2.5 py-1 rounded-md font-black tracking-widest">SAFETY</span>
-                    <span className="text-[10px] text-slate-500 flex items-center gap-1.5 font-medium">
-                      <BookOpen size={12} /> Source Evidence
-                    </span>
-                  </div>
-                </div>
+                <AnimatePresence mode="popLayout">
+                  {questions.map((q) => (
+                    <motion.div
+                      key={q.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.4, ease: "easeOut" }}
+                      className="glass-ai p-6 rounded-2xl space-y-4 group hover:bg-primary/[0.08] transition-all cursor-pointer border border-primary/5 hover:border-primary/20 shadow-sm"
+                    >
+                      <p className="text-sm font-bold text-slate-800 leading-relaxed">{q.text}</p>
+                      <div className="flex items-center gap-3">
+                        <span className="bg-primary/20 text-primary text-[9px] px-2.5 py-1 rounded-md font-black tracking-widest uppercase">{q.category}</span>
+                        <span className="text-[10px] text-slate-500 flex items-center gap-1.5 font-medium">
+                          <BookOpen size={12} /> Source Evidence
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             </div>
           </section>
@@ -465,7 +537,7 @@ export default function App() {
       </main>
 
       {/* Floating AI Action */}
-      <motion.button 
+      <motion.button
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-tr from-primary to-primary-container text-white rounded-full shadow-2xl flex items-center justify-center z-50 group"
