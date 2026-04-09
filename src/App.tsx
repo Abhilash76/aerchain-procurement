@@ -78,6 +78,8 @@ const sowPoints = [
   "Resource Density", "Project Governance"
 ];
 
+const V_COLORS = ["#818cf8", "#f472b6", "#34d399", "#fbbf24", "#a78bfa", "#f87171", "#22d3ee", "#fb923c"];
+
 // Base vendor data
 const baseVendors = [
   {
@@ -162,6 +164,7 @@ export default function App() {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [extractedData, setExtractedData] = useState<any>(null);
   const [expandedReportIdx, setExpandedReportIdx] = useState<number | null>(0);
+  const [analysisProgress, setAnalysisProgress] = useState<{current: number, total: number} | null>(null);
   const [activePage, setActivePage] = useState<number | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -379,94 +382,142 @@ Example format:
     }
   };
 
-  const handleAnalyze = async () => {
-    if (uploadedFiles.length === 0) return;
-    setIsAnalyzing(true);
+  const analyzeSingleDocument = async (file: File, text: string) => {
+    const OLLAMA_URL = "http://localhost:11434/api/chat";
+    const MODEL_NAME = "kimi-k2-thinking:cloud";
 
-    try {
-      console.log(`Extracting content from ${uploadedFiles.length} documents...`);
-      
-      const allExtractedTexts = await Promise.all(
-        uploadedFiles.map(async (file) => {
-          const text = await extractContent(file);
-          return `--- START VENDOR DOCUMENT: ${file.name} ---\n${text}\n--- END VENDOR DOCUMENT: ${file.name} ---`;
-        })
-      );
-
-      const combinedText = allExtractedTexts.join('\n\n');
-
-      const OLLAMA_URL = "http://localhost:11434/api/chat";
-      const MODEL_NAME = "kimi-k2-thinking:cloud";
-
-      const prompt = `Perform a granular, point-based analysis for EACH individual vendor document provided. Compare them against the NutriKid RFQ requirements.
+    const prompt = `Analyze this vendor's procurement proposal for the NutriKid project. 
+FILE: ${file.name}
 
 REQUIREMENTS:
 ${lineItems.map(item => `- ${item.name}: ${item.description}`).join('\n')}
 
 INSTRUCTIONS:
-1. For EACH vendor, provide a point-based summary answering how they meet the SOW requirements.
-2. Every summary point MUST be backed by an exact location citation using (Source: [FileName], Page X).
-3. Return the analysis in a structured JSON block at the end of your response using this EXACT format:
+1. Provide a point-based summary (5-8 points) of how this specific vendor meets the requirements.
+2. Every point MUST cite the exact location in THIS document: (Source: [FileName], Page X) etc.
+3. Extract scores (1-10) for: Strategy, Creative, Speed, Reach, Media, Compliance, Resource, Governance.
+4. Extract the total proposed cost.
+5. Return a structured JSON block.
 
-\`\`\`json
-{
-  "summary": "Overall comparison summary text...",
-  "reports": [
-    {
-      "vendorName": "Nexus Creative",
-      "summaryPoints": [
-        { "point": "Proposed high-fidelity creative strategy...", "citation": "(Source: [Nexus_Proposal.docx], Page 12)" },
-        { "point": "Full TVC production included...", "citation": "(Source: [Nexus_Proposal.docx], Page 24)" }
-      ],
-      "scores": { "Strategy": 9.5, "Creative": 9.8, "Speed": 7.0, "Reach": 9.0, "Media": 8.5, "Compliance": 9.2, "Resource": 9.0, "Governance": 9.0 },
-      "totalCost": 1350000
-    },
-    ... similar objects for each vendor found in the documents
-  ]
-}
-\`\`\`
-
-CITATION RULE:
-Every time you make a statement about a specific vendor, you MUST cite the source file and page using (Source: [FileName], Page X).
-
-VENDOR DOCUMENTS:
-${combinedText.substring(0, 30000)}
+VENDOR TEXT:
+${text.substring(0, 15000)}
 `;
 
-      const response = await fetch(OLLAMA_URL, {
+    const response = await fetch(OLLAMA_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false
+      })
+    });
+
+    if (!response.ok) throw new Error(`Ollama connection error (${response.status})`);
+    
+    const data = await response.json();
+    const content = data.message.content;
+    
+    // Robust JSON extraction
+    let jsonStr = '';
+    const markdownMatch = content.match(/```json\n([\s\S]*?)\n```/);
+    if (markdownMatch) {
+      jsonStr = markdownMatch[1];
+    } else {
+      const curlyMatch = content.match(/\{[\s\S]*\}/);
+      if (curlyMatch) {
+        jsonStr = curlyMatch[0];
+      }
+    }
+
+    if (!jsonStr) throw new Error(`No JSON found in AI response for ${file.name}`);
+
+    try {
+      const parsed = JSON.parse(jsonStr);
+      // Numeric Sanitization: Ensure totalCost is a number
+      if (typeof parsed.totalCost === 'string') {
+        const numericMatch = parsed.totalCost.replace(/[^0-9.]/g, '');
+        parsed.totalCost = parseFloat(numericMatch) || 0;
+      } else if (typeof parsed.totalCost !== 'number') {
+        parsed.totalCost = 0;
+      }
+      return parsed;
+    } catch (e) {
+      console.error(`JSON Parse Error for ${file.name}:`, e, "Content was:", jsonStr);
+      throw new Error(`Invalid JSON format in response for ${file.name}`);
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (uploadedFiles.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisProgress({ current: 0, total: uploadedFiles.length });
+
+    try {
+      console.log(`Starting Resilient Parallel Analysis for ${uploadedFiles.length} documents...`);
+      
+      // Phase 1: Individual Extractions (Settled Parallelism)
+      const results = await Promise.allSettled(
+        uploadedFiles.map(async (file) => {
+          const text = await extractContent(file);
+          const report = await analyzeSingleDocument(file, text);
+          setAnalysisProgress(prev => prev ? { ...prev, current: prev.current + 1 } : null);
+          return report;
+        })
+      );
+
+      const successfulReports = results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map(r => r.value);
+      
+      const failedReports = results
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .map(r => r.reason.message);
+
+      if (successfulReports.length === 0) {
+        throw new Error(`All documents failed to analyze. Reasons: ${failedReports.join(', ')}`);
+      }
+
+      // Phase 2: Final Aggregation (Comparison Summary)
+      const MODEL_NAME = "kimi-k2-thinking:cloud";
+      const OLLAMA_URL = "http://localhost:11434/api/chat";
+      
+      const aggregationPrompt = `Compare following vendor reports for NutriKid:
+${successfulReports.map(r => `- ${r.vendorName}: Cost $${r.totalCost}, Avg Score: ${(Object.values(r.scores as Record<string, number>).reduce((acc: number, val: number) => acc + (val || 0), 0) / 8).toFixed(1)}`).join('\n')}
+
+Provide a high-level executive summary of the comparison and a recommendation.`;
+
+      const aggResponse = await fetch(OLLAMA_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: MODEL_NAME,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: 'user', content: aggregationPrompt }],
           stream: false
         })
       });
 
-      if (!response.ok) throw new Error(`Ollama Error: ${response.status}`);
+      const aggData = await aggResponse.json();
+      const finalSummary = aggData.message.content;
 
-      const data = await response.json();
-      const content = data.message.content;
-      setAiAnalysis(content);
-
-      // Extract JSON for charts
-      const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[1]);
-          setExtractedData(parsed);
-        } catch (e) {
-          console.error("Failed to parse AI JSON data", e);
-        }
-      }
+      setAiAnalysis(finalSummary);
+      setExtractedData({
+        summary: finalSummary,
+        reports: successfulReports
+      });
       
+      if (failedReports.length > 0) {
+        alert(`Partial Success: ${successfulReports.length} vendors analyzed. ${failedReports.length} failed. Check console for details.`);
+      }
+
       setTimeout(() => setCurrentStep('Dashboard'), 2000);
 
-    } catch (error) {
-      console.error("Analysis Error:", error);
-      alert("AI Comparison Failed. Check console for details.");
+    } catch (error: any) {
+      console.error("Critical Analysis Error:", error);
+      alert(`AI Comparison Failed: ${error.message}`);
     } finally {
       setIsAnalyzing(false);
+      setAnalysisProgress(null);
     }
   };
 
@@ -941,7 +992,9 @@ ${combinedText.substring(0, 30000)}
                         ) : (
                           <Bot size={24} />
                         )}
-                        {isAnalyzing ? `Comparing ${uploadedFiles.length} Vendors...` : 'Run AI Comparison'}
+                        {isAnalyzing 
+                          ? `Analysis Progress: ${analysisProgress?.current}/${analysisProgress?.total || uploadedFiles.length}` 
+                          : 'Run AI Comparison'}
                       </button>
                     </div>
                   )}
@@ -1183,9 +1236,19 @@ ${combinedText.substring(0, 30000)}
                         <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                           <PolarGrid stroke="#1e293b" />
                           <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                          <Radar name="Nexus Creative" dataKey="Nexus Creative" stroke="#818cf8" fill="#818cf8" fillOpacity={0.6} />
-                          <Radar name="Global Media Hub" dataKey="Global Media Hub" stroke="#f472b6" fill="#f472b6" fillOpacity={0.4} />
-                          <Radar name="Velocity Studios" dataKey="Velocity Studios" stroke="#34d399" fill="#34d399" fillOpacity={0.4} />
+                          {radarData.length > 0 && Object.keys(radarData[0])
+                            .filter(key => key !== 'subject')
+                            .map((vendorName, idx) => (
+                              <Radar
+                                key={vendorName}
+                                name={vendorName}
+                                dataKey={vendorName}
+                                stroke={V_COLORS[idx % V_COLORS.length]}
+                                fill={V_COLORS[idx % V_COLORS.length]}
+                                fillOpacity={idx === 0 ? 0.6 : 0.4}
+                              />
+                            ))
+                          }
                           <Legend iconType="circle" wrapperStyle={{ paddingTop: '30px', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }} />
                         </RadarChart>
                       </ResponsiveContainer>
@@ -1211,7 +1274,7 @@ ${combinedText.substring(0, 30000)}
                           />
                           <Bar dataKey="cost" radius={[0, 8, 8, 0]}>
                             {costData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={vendors[index].color} />
+                              <Cell key={`cell-${index}`} fill={V_COLORS[index % V_COLORS.length]} />
                             ))}
                           </Bar>
                         </ReBarChart>
@@ -1230,8 +1293,8 @@ ${combinedText.substring(0, 30000)}
                     Selection Strategy: <span className="text-primary">{extractedData ? "Optimized Multi-Award" : "Split Award Model"}</span>
                    </h3>
                    <div className="space-y-6 text-slate-300 leading-relaxed text-lg">
-                     {extractedData ? (
-                        <p>Our cross-vendor comparison suggests that **{extractedData.costData[0].name}** offers the strongest strategic alignment, while **{extractedData.costData[2].name}** provides the most competitive production rates. We recommend a hybrid allocation to maximize both quality and budget efficiency.</p>
+                     {extractedData?.reports ? (
+                        <p>Our dynamic vendor analysis identifies **{costData[0]?.name || 'a vendor'}** as a high-potential partner. We recommend awarding workstreams based on the technical scores and cost efficiencies highlighted above to maximize overall ROI.</p>
                      ) : (
                         <p>Based on technical scoring, **Nexus Creative** leads in Strategy & Creative (9.4/10), while **Velocity Studios** offers superior value for TVC Production (saves $86k vs Hub). We recommend awarding Creative workstreams to Nexus and Production to Velocity for a **composite savings of 14.8%** without quality degradation.</p>
                      )}
