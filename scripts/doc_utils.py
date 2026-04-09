@@ -1,21 +1,46 @@
 import random
 
 # Vendor-specific data profiles for realistic comparison
+# Every vendor now covers 100% of all LINE_ITEMS from the SOW
 VENDOR_PROFILES = {
     "Nexus Creative": {
-        "costs": {"Strategy": 120000, "TVC": 450000, "Social": 80000, "Compliance": 15000},
+        "costs": {
+            "Strategy & Creative Development": 125000,
+            "TVC Development": 180000,
+            "TVC Production": 520000,
+            "Social Organic": 95000,
+            "Social Paid": 110000,
+            "Compliance Review": 25000,
+            "Program Management": 45000
+        },
         "scores": {"Strategy": 95, "Creative": 98, "Speed": 75, "Compliance": 90},
-        "style": "premium, high-quality, high-budget"
+        "style": "premium, high-quality, high-budget, high-compliance focus"
     },
     "Global Media Hub": {
-        "costs": {"Strategy": 80000, "TVC": 300000, "Social": 120000, "Compliance": 25000},
+        "costs": {
+            "Strategy & Creative Development": 85000,
+            "TVC Development": 120000,
+            "TVC Production": 380000,
+            "Social Organic": 130000,
+            "Social Paid": 150000,
+            "Compliance Review": 35000,
+            "Program Management": 65000
+        },
         "scores": {"Strategy": 85, "Creative": 80, "Speed": 92, "Compliance": 98},
-        "style": "efficient, global-scale, integrated"
+        "style": "efficient, global-scale, integrated, network-strength"
     },
     "Velocity Studios": {
-        "costs": {"Strategy": 50000, "TVC": 200000, "Social": 60000, "Compliance": 10000},
+        "costs": {
+            "Strategy & Creative Development": 45000,
+            "TVC Development": 95000,
+            "TVC Production": 210000,
+            "Social Organic": 55000,
+            "Social Paid": 75000,
+            "Compliance Review": 12000,
+            "Program Management": 22000
+        },
         "scores": {"Strategy": 70, "Creative": 85, "Speed": 95, "Compliance": 80},
-        "style": "fast, agile, cost-effective"
+        "style": "fast, agile, cost-effective, digital-first"
     }
 }
 

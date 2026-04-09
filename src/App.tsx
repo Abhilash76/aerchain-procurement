@@ -381,7 +381,6 @@ Example format:
       setIsGenerating(false);
     }
   };
-
   const analyzeSingleDocument = async (file: File, text: string) => {
     const OLLAMA_URL = "http://localhost:11434/api/chat";
     const MODEL_NAME = "kimi-k2-thinking:cloud";
@@ -415,7 +414,7 @@ Return ONLY a JSON block like this:
 }
 
 VENDOR TEXT:
-${text.substring(0, 15000)}
+${text.substring(0, 8000)}
 `;
 
     const response = await fetch(OLLAMA_URL, {
@@ -486,6 +485,8 @@ ${text.substring(0, 15000)}
           const text = await extractContent(file);
           const report = await analyzeSingleDocument(file, text);
           successfulReports.push(report);
+          // 1.5s 'Breather' delay to let local GPU/CPU stabilize
+          await new Promise(resolve => setTimeout(resolve, 1500));
         } catch (err: any) {
           console.error(`Failed to analyze ${file.name}:`, err);
           failedReports.push(`${file.name}: ${err.message}`);
