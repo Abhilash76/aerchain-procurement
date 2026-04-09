@@ -384,92 +384,40 @@ Example format:
       setIsGenerating(false);
     }
   };
-  const analyzeSingleDocument = async (file: File, text: string) => {
-    const OLLAMA_URL = "http://localhost:11434/api/chat";
-    const MODEL_NAME = "kimi-k2-thinking:cloud";
+  const ANALYSIS_SERVER = "http://localhost:8765";
 
-    const prompt = `Analyze this vendor's procurement proposal for the NutriKid project. 
-FILE: ${file.name}
+  const analyzeSingleDocument = async (file: File) => {
+    // Ping the analysis server first
+    const healthCheck = await fetch(`${ANALYSIS_SERVER}/health`).catch(() => null);
+    if (!healthCheck || !healthCheck.ok) {
+      throw new Error(`Analysis server not running. Start it with: python scripts/analysis_server.py`);
+    }
 
-REQUIREMENTS:
-${lineItems.map(item => `- ${item.name}: ${item.description}`).join('\n')}
+    const formData = new FormData();
+    formData.append("file", file);
 
-INSTRUCTIONS:
-1. For EVERY Line Item in the SOW provided above, find and extract the corresponding clause/quote from the vendor proposal.
-2. NORMALIZE and MAP: Even if they use different names (e.g., "Budget" instead of "Cost"), normalize their quote to match our SOW requirement.
-3. For each mapping, identify:
-   - sowPoint: Name of the line item from SOW.
-   - vendorTerm: The specific term they used (e.g. "Financial ceiling").
-   - finding: What the vendor actually said or quoted.
-   - impact: How their quote impacts our project (e.g., "Exceeds required scope", "Price deviation identified").
-   - citation: Exact (Source: [File], Page X).
-4. Extract scores (1-10) for technical benchmarking.
-5. Extract the total proposed cost as a number.
-
-Return ONLY a JSON block like this:
-{
-  "vendorName": "extracted vendor name",
-  "mappings": [
-    { "sowPoint": "...", "vendorTerm": "...", "finding": "...", "impact": "...", "citation": "..." }
-  ],
-  "scores": { "Strategy": 9, ... },
-  "totalCost": 612000
-}
-
-VENDOR TEXT:
-${text.substring(0, 8000)}
-`;
-
-    const response = await fetch(OLLAMA_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        messages: [{ role: 'user', content: prompt }],
-        stream: false
-      })
+    const response = await fetch(`${ANALYSIS_SERVER}/analyze`, {
+      method: "POST",
+      body: formData,
     }).catch(err => {
-      console.error("Connection Error:", err);
-      throw new Error("Unable to connect to Ollama. Is it running on http://localhost:11434?");
+      throw new Error(`Cannot reach analysis server: ${err.message}`);
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Ollama Error (${response.status}): ${errorData.error || 'Check if model "kimi-k2-thinking:cloud" is installed'}`);
-    }
-    
-    const data = await response.json();
-    const content = data.message.content;
-    
-    // Robust JSON extraction
-    let jsonStr = '';
-    const markdownMatch = content.match(/```json\n([\s\S]*?)\n```/);
-    if (markdownMatch) {
-      jsonStr = markdownMatch[1];
-    } else {
-      const curlyMatch = content.match(/\{[\s\S]*\}/);
-      if (curlyMatch) {
-        jsonStr = curlyMatch[0];
-      }
+      const err = await response.json().catch(() => ({ detail: "Unknown server error" }));
+      throw new Error(`Server error (${response.status}): ${err.detail}`);
     }
 
-    if (!jsonStr) throw new Error(`No JSON found in AI response for ${file.name}`);
+    const result = await response.json();
 
-    try {
-      const parsed = JSON.parse(jsonStr);
-      // Numeric Sanitization: Ensure totalCost is a number
-      if (typeof parsed.totalCost === 'string') {
-        const numericMatch = parsed.totalCost.replace(/[^0-9.]/g, '');
-        parsed.totalCost = parseFloat(numericMatch) || 0;
-      } else if (typeof parsed.totalCost !== 'number') {
-        parsed.totalCost = 0;
-      }
-      return parsed;
-    } catch (e) {
-      console.error(`JSON Parse Error for ${file.name}:`, e, "Content was:", jsonStr);
-      throw new Error(`Invalid JSON format in response for ${file.name}`);
+    // Normalize totalCost
+    if (typeof result.totalCost === "string") {
+      result.totalCost = parseFloat(result.totalCost.replace(/[^\d.]/g, "")) || 0;
     }
+
+    return result;
   };
+
 
   const handleAnalyze = async () => {
     if (uploadedFiles.length === 0) return;
@@ -484,12 +432,12 @@ ${text.substring(0, 8000)}
 
       for (const file of uploadedFiles) {
         try {
-          console.log(`Analyzing: ${file.name}`);
-          const text = await extractContent(file);
-          const report = await analyzeSingleDocument(file, text);
+          console.log(`Analyzing via Docling server: ${file.name}`);
+          // Server handles all parsing (Docling) and AI analysis (Ollama)
+          const report = await analyzeSingleDocument(file);
           successfulReports.push(report);
-          // 1.5s 'Breather' delay to let local GPU/CPU stabilize
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Small delay between documents
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (err: any) {
           console.error(`Failed to analyze ${file.name}:`, err);
           failedReports.push(`${file.name}: ${err.message}`);
@@ -1122,9 +1070,10 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                                       <table className="w-full text-left text-[11px] border-collapse">
                                         <thead>
                                           <tr className="bg-white/5 border-b border-white/5">
-                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/4">SOW Requirement</th>
-                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/2">Vendor Finding</th>
-                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/4">Impact</th>
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/5">SOW Requirement</th>
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-2/5">Vendor Finding</th>
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/5">Impact</th>
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/5 text-center">Match %</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
@@ -1153,12 +1102,81 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                                                   <p className="text-[10px] text-slate-400 font-medium italic">{map.impact}</p>
                                                 </div>
                                               </td>
+                                              {/* NEW: Match Score column */}
+                                              <td className="px-4 py-4 align-top text-center">
+                                                <div className={`text-lg font-black ${(map.matchScore ?? 75) >= 80 ? 'text-emerald-400' : (map.matchScore ?? 75) >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
+                                                  {map.matchScore ?? '—'}
+                                                </div>
+                                                <div className="text-[9px] text-slate-600 font-bold">/ 100</div>
+                                              </td>
                                             </tr>
                                           ))}
                                         </tbody>
                                       </table>
                                     </div>
                                   </div>
+
+                                  {/* NEW: SOW Alignment Meter */}
+                                  {report.overallSowAlignment !== undefined && (
+                                    <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Overall SOW Alignment</p>
+                                        <span className={`text-sm font-black ${report.overallSowAlignment >= 80 ? 'text-emerald-400' : report.overallSowAlignment >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
+                                          {report.overallSowAlignment}%
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-white/10 rounded-full h-2">
+                                        <div
+                                          className={`h-2 rounded-full transition-all duration-700 ${report.overallSowAlignment >= 80 ? 'bg-emerald-400' : report.overallSowAlignment >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                                          style={{ width: `${report.overallSowAlignment}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* NEW: Strengths & Gaps */}
+                                  {(report.strengths?.length > 0 || report.gaps?.length > 0) && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                      {report.strengths?.length > 0 && (
+                                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                                          <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-3">✓ Strengths</p>
+                                          <ul className="space-y-1.5">
+                                            {report.strengths.map((s: string, i: number) => (
+                                              <li key={i} className="text-[10px] text-slate-300 font-medium leading-relaxed flex gap-2">
+                                                <span className="text-emerald-400 mt-0.5 shrink-0">•</span>{s}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {report.gaps?.length > 0 && (
+                                        <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4">
+                                          <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-3">⚠ Gaps</p>
+                                          <ul className="space-y-1.5">
+                                            {report.gaps.map((g: string, i: number) => (
+                                              <li key={i} className="text-[10px] text-slate-300 font-medium leading-relaxed flex gap-2">
+                                                <span className="text-rose-400 mt-0.5 shrink-0">•</span>{g}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* NEW: Missing Requirements */}
+                                  {report.missingRequirements?.length > 0 && (
+                                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
+                                      <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-3">⚡ Missing SOW Requirements</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {report.missingRequirements.map((req: string, i: number) => (
+                                          <span key={i} className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[9px] font-bold text-amber-300 uppercase tracking-wide">
+                                            {req}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
@@ -1367,16 +1385,16 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                 </section>
               </div>
 
-              <section className="bg-primary/10 rounded-[40px] p-12 border border-primary/20 relative overflow-hidden group">
-                 <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12 group-hover:scale-110 transition-transform">
+              <section className="bg-white rounded-[40px] p-12 border border-slate-200 relative overflow-hidden group shadow-2xl">
+                 <div className="absolute top-0 right-0 p-8 opacity-5 rotate-12 group-hover:scale-110 transition-transform">
                    <Sparkles size={200} className="text-primary" />
                  </div>
                  <div className="max-w-3xl relative z-10">
-                   <span className="bg-primary text-white text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest mb-6 inline-block">AI Recommendation</span>
-                   <h3 className="text-4xl font-black text-white mb-6 leading-tight">
+                   <span className="bg-primary text-white text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest mb-6 inline-block shadow-lg shadow-primary/20">AI Recommendation</span>
+                   <h3 className="text-4xl font-black text-slate-900 mb-6 leading-tight">
                     Selection Strategy: <span className="text-primary">{extractedData ? "Optimized Multi-Award" : "Split Award Model"}</span>
                    </h3>
-                    <div className="space-y-6 text-slate-100 leading-relaxed text-lg font-medium">
+                   <div className="space-y-6 text-slate-900 leading-relaxed text-lg font-medium">
                      {extractedData?.reports ? (
                         <p>Our dynamic vendor analysis identifies **{costData[0]?.name || 'a vendor'}** as a high-potential partner. We recommend awarding workstreams based on the technical scores and cost efficiencies highlighted above to maximize overall ROI.</p>
                      ) : (
@@ -1385,12 +1403,12 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                      <div className="flex items-center gap-8 pt-6">
                         <div>
                           <p className="text-[10px] font-black text-primary uppercase mb-1">Impact Level</p>
-                          <p className="text-xl font-bold text-white">{extractedData ? "Transformation" : "Strategic"}</p>
+                          <p className="text-xl font-bold text-slate-900">{extractedData ? "Transformation" : "Strategic"}</p>
                         </div>
-                        <div className="h-10 w-[1px] bg-white/10" />
+                        <div className="h-10 w-[1px] bg-slate-200" />
                         <div>
                           <p className="text-[10px] font-black text-primary uppercase mb-1">Time to Award</p>
-                          <p className="text-xl font-bold text-white">48 Hours</p>
+                          <p className="text-xl font-bold text-slate-900">48 Hours</p>
                         </div>
                      </div>
                    </div>
