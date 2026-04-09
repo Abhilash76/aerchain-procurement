@@ -393,11 +393,26 @@ REQUIREMENTS:
 ${lineItems.map(item => `- ${item.name}: ${item.description}`).join('\n')}
 
 INSTRUCTIONS:
-1. Provide a point-based summary (5-8 points) of how this specific vendor meets the requirements.
-2. Every point MUST cite the exact location in THIS document: (Source: [FileName], Page X) etc.
-3. Extract scores (1-10) for: Strategy, Creative, Speed, Reach, Media, Compliance, Resource, Governance.
-4. Extract the total proposed cost.
-5. Return a structured JSON block.
+1. For EVERY Line Item in the SOW provided above, find and extract the corresponding clause/quote from the vendor proposal.
+2. NORMALIZE and MAP: Even if they use different names (e.g., "Budget" instead of "Cost"), normalize their quote to match our SOW requirement.
+3. For each mapping, identify:
+   - sowPoint: Name of the line item from SOW.
+   - vendorTerm: The specific term they used (e.g. "Financial ceiling").
+   - finding: What the vendor actually said or quoted.
+   - impact: How their quote impacts our project (e.g., "Exceeds required scope", "Price deviation identified").
+   - citation: Exact (Source: [File], Page X).
+4. Extract scores (1-10) for technical benchmarking.
+5. Extract the total proposed cost as a number.
+
+Return ONLY a JSON block like this:
+{
+  "vendorName": "extracted vendor name",
+  "mappings": [
+    { "sowPoint": "...", "vendorTerm": "...", "finding": "...", "impact": "...", "citation": "..." }
+  ],
+  "scores": { "Strategy": 9, ... },
+  "totalCost": 612000
+}
 
 VENDOR TEXT:
 ${text.substring(0, 15000)}
@@ -411,9 +426,15 @@ ${text.substring(0, 15000)}
         messages: [{ role: 'user', content: prompt }],
         stream: false
       })
+    }).catch(err => {
+      console.error("Connection Error:", err);
+      throw new Error("Unable to connect to Ollama. Is it running on http://localhost:11434?");
     });
 
-    if (!response.ok) throw new Error(`Ollama connection error (${response.status})`);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Ollama Error (${response.status}): ${errorData.error || 'Check if model "kimi-k2-thinking:cloud" is installed'}`);
+    }
     
     const data = await response.json();
     const content = data.message.content;
@@ -454,25 +475,24 @@ ${text.substring(0, 15000)}
     setAnalysisProgress({ current: 0, total: uploadedFiles.length });
 
     try {
-      console.log(`Starting Resilient Parallel Analysis for ${uploadedFiles.length} documents...`);
+      console.log(`Starting Robust Sequential Analysis for ${uploadedFiles.length} documents...`);
       
-      // Phase 1: Individual Extractions (Settled Parallelism)
-      const results = await Promise.allSettled(
-        uploadedFiles.map(async (file) => {
+      const successfulReports: any[] = [];
+      const failedReports: string[] = [];
+
+      for (const file of uploadedFiles) {
+        try {
+          console.log(`Analyzing: ${file.name}`);
           const text = await extractContent(file);
           const report = await analyzeSingleDocument(file, text);
+          successfulReports.push(report);
+        } catch (err: any) {
+          console.error(`Failed to analyze ${file.name}:`, err);
+          failedReports.push(`${file.name}: ${err.message}`);
+        } finally {
           setAnalysisProgress(prev => prev ? { ...prev, current: prev.current + 1 } : null);
-          return report;
-        })
-      );
-
-      const successfulReports = results
-        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
-        .map(r => r.value);
-      
-      const failedReports = results
-        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-        .map(r => r.reason.message);
+        }
+      }
 
       if (successfulReports.length === 0) {
         throw new Error(`All documents failed to analyze. Reasons: ${failedReports.join(', ')}`);
@@ -495,10 +515,16 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
           messages: [{ role: 'user', content: aggregationPrompt }],
           stream: false
         })
+      }).catch(err => {
+        console.warn("Aggregation failed but keeping individual reports:", err);
+        return null;
       });
 
-      const aggData = await aggResponse.json();
-      const finalSummary = aggData.message.content;
+      let finalSummary = "Comparison complete. Direct mappings are available for each vendor below.";
+      if (aggResponse && aggResponse.ok) {
+        const aggData = await aggResponse.json();
+        finalSummary = aggData.message?.content || finalSummary;
+      }
 
       setAiAnalysis(finalSummary);
       setExtractedData({
@@ -509,8 +535,6 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
       if (failedReports.length > 0) {
         alert(`Partial Success: ${successfulReports.length} vendors analyzed. ${failedReports.length} failed. Check console for details.`);
       }
-
-      setTimeout(() => setCurrentStep('Dashboard'), 2000);
 
     } catch (error: any) {
       console.error("Critical Analysis Error:", error);
@@ -996,6 +1020,28 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                           ? `Analysis Progress: ${analysisProgress?.current}/${analysisProgress?.total || uploadedFiles.length}` 
                           : 'Run AI Comparison'}
                       </button>
+
+                      {aiAnalysis && !isAnalyzing && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-8 p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-[32px] max-w-2xl mx-auto flex flex-col items-center gap-4"
+                        >
+                          <div className="flex items-center gap-3 text-emerald-400">
+                            <CheckCircle2 size={24} />
+                            <span className="text-sm font-black uppercase tracking-widest">Analysis Complete: Normalize & Map Grid Ready</span>
+                          </div>
+                          <p className="text-slate-400 text-xs font-medium text-center">
+                            We have successfully mapped {uploadedFiles.length} vendor documents to your SOW. You can review the granular mappings below or proceed to the benchmarking dashboard.
+                          </p>
+                          <button
+                            onClick={() => setCurrentStep('Dashboard')}
+                            className="flex items-center gap-2 px-8 py-3 bg-white text-primary rounded-full text-[11px] font-black uppercase tracking-widest shadow-xl hover:shadow-primary/20 transition-all border border-slate-100"
+                          >
+                            Explore Benchmarking Dashboard <Sparkles size={14} />
+                          </button>
+                        </motion.div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1064,25 +1110,50 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                               >
                                 <div className="px-8 pb-8 pt-2 space-y-6">
                                   <div className="bg-white/5 rounded-xl p-6 border border-white/5">
-                                    <div className="flex items-center justify-between mb-4">
-                                      <h5 className="text-[10px] font-black uppercase tracking-widest text-primary">SOW Compliance Points</h5>
-                                      <span className="text-[10px] text-slate-500 font-bold italic">{report.summaryPoints?.length || 0} Key Evidences</span>
+                                    <div className="flex items-center justify-between mb-6">
+                                      <h5 className="text-[10px] font-black uppercase tracking-widest text-primary">Normalize & Map: SOW Comparison</h5>
+                                      <span className="text-[10px] text-slate-500 font-bold italic">{report.mappings?.length || 0} Points Mapped</span>
                                     </div>
-                                    <ul className="space-y-4">
-                                      {report.summaryPoints?.map((item: any, pIdx: number) => (
-                                        <li key={pIdx} className="flex gap-3 items-start group">
-                                          <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors shrink-0" />
-                                          <div className="space-y-1">
-                                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                                              <CitationsRenderer 
-                                                content={`${item.point} ${item.citation}`} 
-                                                onCitationClick={(page) => setActivePage(page)}
-                                              />
-                                            </p>
-                                          </div>
-                                        </li>
-                                      ))}
-                                    </ul>
+                                    <div className="overflow-hidden rounded-xl border border-white/5 bg-slate-900/50">
+                                      <table className="w-full text-left text-[11px] border-collapse">
+                                        <thead>
+                                          <tr className="bg-white/5 border-b border-white/5">
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/4">SOW Requirement</th>
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/2">Vendor Finding</th>
+                                            <th className="px-4 py-3 font-black text-slate-400 uppercase tracking-widest w-1/4">Impact</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                          {(report.mappings || []).map((map: any, mIdx: number) => (
+                                            <tr key={mIdx} className="hover:bg-white/[0.02] transition-colors group">
+                                              <td className="px-4 py-4 align-top">
+                                                <div className="font-bold text-white group-hover:text-primary transition-colors">{map.sowPoint}</div>
+                                                <div className="text-[9px] text-slate-500 mt-1 font-medium italic">As: {map.vendorTerm || 'Matched'}</div>
+                                              </td>
+                                              <td className="px-4 py-4 align-top">
+                                                <div className="space-y-2">
+                                                  <p className="text-slate-300 leading-relaxed font-medium line-clamp-3 group-hover:line-clamp-none">
+                                                    {map.finding}
+                                                  </p>
+                                                  <CitationsRenderer 
+                                                    content={map.citation || ""} 
+                                                    onCitationClick={(target) => setActivePage(target.type === 'page' ? Number(target.value) : null)}
+                                                  />
+                                                </div>
+                                              </td>
+                                              <td className="px-4 py-4 align-top">
+                                                <div className="flex flex-col gap-2">
+                                                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight w-fit ${map.impact?.toLowerCase().includes('exceeds') || map.impact?.toLowerCase().includes('compliant') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-primary/10 text-primary border border-primary/20'}`}>
+                                                    {map.impact?.substring(0, 15)}...
+                                                  </span>
+                                                  <p className="text-[10px] text-slate-400 font-medium italic">{map.impact}</p>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-4">
