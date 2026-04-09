@@ -202,13 +202,16 @@ export default function App() {
   }, [activeScenario]);
 
   const radarData = useMemo(() => {
+    // Standardized axes for vendor comparison
     const factors = ['Strategy', 'Creative', 'Speed', 'Reach', 'Media', 'Compliance', 'Resource', 'Governance'];
     
     if (extractedData?.reports) {
       return factors.map(f => {
         const row: any = { subject: f };
         extractedData.reports.forEach((report: any) => {
-          row[report.vendorName] = report.scores[f] || 0;
+          // Normalize matching: Check if the key starts with or includes the factor name
+          const scoreKey = Object.keys(report.scores || {}).find(k => k.toLowerCase().includes(f.toLowerCase()));
+          row[report.vendorName] = scoreKey ? report.scores[scoreKey] : (report.scores[f] || 0);
         });
         return row;
       });
@@ -1296,18 +1299,19 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
               </div>
 
               <div ref={chartRef} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <section className="bg-slate-900 rounded-[40px] p-10 border border-white/5 relative overflow-hidden group">
+                <section className="bg-slate-900/80 backdrop-blur-2xl rounded-[40px] p-10 border border-white/5 relative overflow-hidden group shadow-2xl">
                    <div className="flex items-center justify-between mb-10">
                      <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                       <Activity size={24} className="text-primary" /> Vendor Benchmarking
+                       <Activity size={24} className="text-primary animate-pulse" /> Vendor Benchmarking
                      </h3>
-                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">SOW Points Comparison</span>
+                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-3 py-1 rounded-full">SOW Alignment Data</span>
                    </div>
                    <div className="h-[450px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                           <PolarGrid stroke="#1e293b" />
                           <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: '#475569' }} axisLine={false} />
                           {radarData.length > 0 && Object.keys(radarData[0])
                             .filter(key => key !== 'subject')
                             .map((vendorName, idx) => (
@@ -1317,11 +1321,17 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                                 dataKey={vendorName}
                                 stroke={V_COLORS[idx % V_COLORS.length]}
                                 fill={V_COLORS[idx % V_COLORS.length]}
-                                fillOpacity={idx === 0 ? 0.6 : 0.4}
+                                fillOpacity={0.3}
+                                animationDuration={1500}
+                                dot={{ r: 3, fill: V_COLORS[idx % V_COLORS.length] }}
                               />
                             ))
                           }
                           <Legend iconType="circle" wrapperStyle={{ paddingTop: '30px', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '11px', fontWeight: 800 }}
+                            itemStyle={{ color: '#fff' }}
+                          />
                         </RadarChart>
                       </ResponsiveContainer>
                    </div>
@@ -1334,24 +1344,26 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                      </h3>
                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Value by Vendor</span>
                    </div>
-                   <div className="h-[450px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ReBarChart data={costData} layout="vertical" barSize={32}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                          <XAxis type="number" hide />
-                          <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} width={120} />
-                          <Tooltip 
-                            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', fontSize: '12px' }}
-                            cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                          />
-                          <Bar dataKey="cost" radius={[0, 8, 8, 0]}>
-                            {costData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={V_COLORS[index % V_COLORS.length]} />
-                            ))}
-                          </Bar>
-                        </ReBarChart>
-                      </ResponsiveContainer>
-                   </div>
+                    <div className="h-[450px]">
+                       <ResponsiveContainer width="100%" height="100%">
+                         <ReBarChart data={costData} layout="vertical" barSize={32} margin={{ left: 20, right: 60 }}>
+                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                           <XAxis type="number" hide />
+                           <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} width={120} />
+                           <Tooltip 
+                             cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                             contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', fontSize: '12px', fontWeight: 700 }}
+                             formatter={(value: any) => [`$${(value / 1000).toFixed(0)}K`, 'Total Cost']}
+                             labelStyle={{ color: '#6366f1', marginBottom: '4px' }}
+                           />
+                           <Bar dataKey="cost" radius={[0, 8, 8, 0]} animationDuration={1500}>
+                             {costData.map((entry, index) => (
+                               <Cell key={`cell-${index}`} fill={V_COLORS[index % V_COLORS.length]} />
+                             ))}
+                           </Bar>
+                         </ReBarChart>
+                       </ResponsiveContainer>
+                    </div>
                 </section>
               </div>
 
@@ -1364,7 +1376,7 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                    <h3 className="text-4xl font-black text-white mb-6 leading-tight">
                     Selection Strategy: <span className="text-primary">{extractedData ? "Optimized Multi-Award" : "Split Award Model"}</span>
                    </h3>
-                   <div className="space-y-6 text-slate-300 leading-relaxed text-lg">
+                    <div className="space-y-6 text-slate-100 leading-relaxed text-lg font-medium">
                      {extractedData?.reports ? (
                         <p>Our dynamic vendor analysis identifies **{costData[0]?.name || 'a vendor'}** as a high-potential partner. We recommend awarding workstreams based on the technical scores and cost efficiencies highlighted above to maximize overall ROI.</p>
                      ) : (
