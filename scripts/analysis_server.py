@@ -77,6 +77,21 @@ def parse_document_with_docling(file_path: str) -> str:
         return md_text
     except Exception as e:
         logger.warning(f"Docling parsing failed for {file_path}: {e}. Falling back to raw text.")
+        # PyPDF2 Fallback for PDF files
+        if file_path.lower().endswith(".pdf"):
+            try:
+                import PyPDF2
+                text = ""
+                with open(file_path, "rb") as f:
+                    reader = PyPDF2.PdfReader(f)
+                    for page in reader.pages:
+                        extracted = page.extract_text()
+                        if extracted:
+                            text += extracted + "\n"
+                return text
+            except Exception as pdf_e:
+                logger.error(f"PyPDF2 fallback also failed: {pdf_e}")
+
         # Fallback: try reading as plain text
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -97,68 +112,78 @@ def extract_json_from_response(content: str) -> dict:
     raise ValueError("No valid JSON found in model response")
 
 def analyze_with_ollama(document_text: str, filename: str) -> VendorAnalysisResult:
-    """Run structured SOW alignment analysis via Ollama."""
+    """Run structured SOW alignment analysis via LangExtract + Ollama."""
     
     sow_items_str = "\n".join([f"- {item['name']}: {item['description']}" for item in SOW_LINE_ITEMS])
     
     # Limit text window to stay within model context
     text_window = document_text[:12000]
     
-    prompt = f"""You are a senior procurement analyst. Analyze this vendor proposal against the SOW requirements below.
+    prompt = f"""You are a senior procurement analyst. Analyze this vendor proposal against the SOW requirements below:
 
 SCOPE OF WORK (SOW) REQUIREMENTS:
 {sow_items_str}
-
-VENDOR DOCUMENT: {filename}
----
-{text_window}
----
 
 TASK:
 1. For EVERY SOW line item, find the corresponding content in the vendor proposal.
 2. Map them precisely, even if the vendor uses different terminology.
 3. Score the overall alignment (0-100%) based on coverage and quality.
 4. Identify missing requirements and key strengths/gaps.
-5. Give technical scores (1-10) for: Strategy, Creative, Speed, Reach, Media, Compliance, Resource, Governance.
+5. Give technical scores (1-10) for: Strategy, Creative, Speed, Reach, Media, Compliance, Resource, Governance."""
 
-Return ONLY valid JSON matching this exact structure:
-{{
-  "vendorName": "string",
-  "documentTitle": "string",
-  "overallSowAlignment": 0-100,
-  "mappings": [
-    {{
-      "sowPoint": "SOW line item name",
-      "vendorTerm": "term vendor used",
-      "finding": "what vendor specifically proposed",
-      "impact": "impact assessment",
-      "citation": "where in document",
-      "matchScore": 0-100
-    }}
-  ],
-  "scores": {{"Strategy": 1-10, "Creative": 1-10, "Speed": 1-10, "Reach": 1-10, "Media": 1-10, "Compliance": 1-10, "Resource": 1-10, "Governance": 1-10}},
-  "totalCost": number,
-  "missingRequirements": ["list of SOW items not addressed"],
-  "strengths": ["key strength 1", "key strength 2"],
-  "gaps": ["gap 1", "gap 2"]
-}}"""
+    example_extractions = [{
+        "vendorName": "Example Vendor",
+        "documentTitle": "Example Proposal.pdf",
+        "overallSowAlignment": 85,
+        "mappings": [{
+            "sowPoint": "Strategy & Planning",
+            "vendorTerm": "Strategic Framework",
+            "finding": "Vendor proposes 12 month framework.",
+            "impact": "Meets specs",
+            "citation": "Page 4",
+            "matchScore": 90
+        }],
+        "scores": {"Strategy": 8, "Creative": 7, "Speed": 9, "Reach": 8, "Media": 7, "Compliance": 9, "Resource": 8, "Governance": 8},
+        "totalCost": 150000,
+        "missingRequirements": ["TVC Production"],
+        "strengths": ["Strong digital reach"],
+        "gaps": ["No TVC experience"]
+    }]
 
-    logger.info(f"Sending to Ollama for analysis: {filename}")
+    logger.info(f"Sending to LangExtract (Ollama) for analysis: {filename}")
     
-    response = ollama.chat(
-        model="kimi-k2-thinking:cloud",
-        messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.1}
-    )
-    
-    content = response["message"]["content"]
-    logger.info(f"Received response ({len(content)} chars) for {filename}")
-    
-    raw = extract_json_from_response(content)
-    
+    try:
+        import langextract as lx
+        example = lx.data.ExampleData(
+            text="Vendor Example Vendor provided a Strategic Framework proposal for 12 months with strong digital reach but no TVC experience for $150,000 on page 4.",
+            extractions=example_extractions
+        )
+        
+        config = lx.factory.ModelConfig(
+            model_id="kimi-k2-thinking:cloud", 
+            provider_kwargs={"base_url": os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434")}
+        )
+
+        result = lx.extract(
+            text_or_documents=text_window,
+            prompt_description=prompt,
+            examples=[example],
+            config=config,
+            temperature=0.1
+        )
+        
+        raw_list = getattr(result, "extractions", [])
+        raw = raw_list[0] if raw_list else {}
+
+    except Exception as e:
+        logger.error(f"LangExtract failed for {filename}: {e}", exc_info=True)
+        raw = {}
+
     # Normalize totalCost to float
-    cost = raw.get("totalCost", 0)
-    if isinstance(cost, str):
+    cost = raw.get("totalCost")
+    if cost is None:
+        cost = 0.0
+    elif isinstance(cost, str):
         cost = float(re.sub(r"[^\d.]", "", cost) or "0")
     raw["totalCost"] = float(cost)
     

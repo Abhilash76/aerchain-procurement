@@ -1,11 +1,13 @@
-fastapi==0.110.0
-uvicorn==0.27.1
-docling==1.0.0
-ollama==0.1.7
-pydantic==2.7.4
+fastapi
+uvicorn
+docling
+ollama
+pydantic
 python-multipart==0.0.9
 requests==2.31.0
 deepsearch-glm[toolkit]
+langextract
+PyPDF2
 # Force CPU-only PyTorch wheels (prevents huge CUDA toolkit deps in containers)
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.2.2+cpu

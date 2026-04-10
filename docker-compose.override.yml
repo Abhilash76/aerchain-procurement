@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_ANALYSIS_SERVER: /api/analysis
+        VITE_OLLAMA_CHAT_URL: /api/ollama/api/chat
+
