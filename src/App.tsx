@@ -113,6 +113,220 @@ const baseVendors = [
 
 // --- Components ---
 
+// --- Data-Driven Recommendation Component ---
+
+const StrategyRecommendation = ({ extractedData, costData, radarData }: any) => {
+  const [selectedScenario, setSelectedScenario] = (useState as any)('Cost');
+
+  const reports = extractedData?.reports || [];
+  
+  if (reports.length === 0) {
+    return (
+      <section className="bg-white rounded-[40px] p-12 border border-slate-200 shadow-2xl">
+         <div className="text-center space-y-4">
+           <Bot size={48} className="text-slate-300 mx-auto" />
+           <p className="text-slate-500 font-bold">Analysis results required for detailed strategy recommendation.</p>
+         </div>
+      </section>
+    );
+  }
+
+  // Calculate bests
+  const bestCost = [...reports].sort((a, b) => a.totalCost - b.totalCost)[0];
+  const bestSpeed = [...reports].sort((a, b) => {
+    const aS = a.scores.Speed || a.scores.Production || 0;
+    const bS = b.scores.Speed || b.scores.Production || 0;
+    return bS - aS;
+  })[0];
+  const bestCompliance = [...reports].sort((a, b) => {
+    const aC = a.scores.Compliance || 0;
+    const bC = b.scores.Compliance || 0;
+    return bC - aC;
+  })[0];
+
+  // Logic for split award
+  const splitPossible = reports.length >= 2;
+  const bestCreative = [...reports].sort((a, b) => (b.scores.Creative || 0) - (a.scores.Creative || 0))[0];
+  const bestMedia = [...reports].sort((a, b) => (b.scores.Media || 0) - (a.scores.Media || 0))[0];
+  
+  const isSplitBetter = splitPossible && (bestCreative.vendorName !== bestMedia.vendorName);
+
+  const scenarioData: any = {
+    Cost: {
+      title: "Lowest Cost Pathway",
+      vendor: bestCost.vendorName,
+      impact: "Maximizes remaining budget for media amplification.",
+      savings: `$${((1.35e6 - bestCost.totalCost) / 1000).toFixed(0)}K`,
+      confidence: 94,
+      risk: "Potential delay in high-fidelity TVC production due to lower resource allocation.",
+      businessValue: "Ideal for testing market proof-of-concept with minimal capital risk. Frees up ~$200k for performance-driven media buying."
+    },
+    Speed: {
+      title: "Fastest Delivery Pathway",
+      vendor: bestSpeed.vendorName,
+      impact: "Accelerates SEA launch by an estimated 3 weeks.",
+      savings: `$${((1.35e6 - bestSpeed.totalCost) / 1000).toFixed(0)}K`,
+      confidence: 88,
+      risk: "Premium pricing for express creative resources and rapid deployment.",
+      businessValue: "Maximizes first-mover advantage in competitive SEA health drink segments. Estimated +12% lift in market share due to early launch."
+    },
+    Compliance: {
+      title: "Maximum Compliance Pathway",
+      vendor: bestCompliance.vendorName,
+      impact: "Zero regulatory rejection risk in cross-border markets.",
+      savings: `$${((1.35e6 - bestCompliance.totalCost) / 1000).toFixed(0)}K`,
+      confidence: 98,
+      risk: "More conservative creative approach to meet strict regulatory guidelines.",
+      businessValue: "Ensures 100% brand safety. Avoids potential $200k+ in regulatory fines and protect local broadcast licenses."
+    }
+  };
+
+  const current = scenarioData[selectedScenario];
+
+  return (
+    <section className="bg-white rounded-[40px] p-12 border border-slate-200 relative overflow-hidden group shadow-2xl transition-all">
+       <div className="absolute top-0 right-0 p-8 opacity-5 rotate-12 group-hover:scale-110 transition-transform">
+         <Sparkles size={200} className="text-primary" />
+       </div>
+       
+       <div className="relative z-10">
+         <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-8">
+           <div className="flex items-center gap-3">
+             <div className="p-3 bg-primary/10 rounded-2xl">
+               <Sparkles size={24} className="text-primary" />
+             </div>
+             <div>
+               <span className="bg-primary text-white text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest shadow-lg shadow-primary/20">Executive Strategy Recommendation</span>
+               <p className="text-xs text-slate-500 font-medium mt-1">Multi-scenario data analysis across all vendor submissions</p>
+             </div>
+           </div>
+           
+           <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+              {(['Cost', 'Speed', 'Compliance'] as const).map(s => (
+                <button 
+                  key={s} 
+                  onClick={() => setSelectedScenario(s)}
+                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedScenario === s ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  {s} Path
+                </button>
+              ))}
+           </div>
+         </div>
+
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+           <div className="space-y-10">
+             <div>
+               <h3 className="text-3xl font-black text-slate-900 leading-tight mb-4">
+                 Strategic Recommendation: <br/><span className="text-primary underline decoration-primary/20">{isSplitBetter ? "Hybrid Split Award" : `Single Award Pathway`}</span>
+               </h3>
+               
+               <div className="bg-primary/5 border border-primary/20 rounded-3xl p-8 shadow-sm">
+                  <p className="text-lg font-bold text-slate-800 leading-relaxed italic">
+                    {isSplitBetter ? (
+                      <>“Recommendation: Split the mandate between <span className="text-primary"> {bestCreative.vendorName} </span> for Strategy & Production and <span className="text-indigo-600"> {bestMedia.vendorName} </span> for Media.”</>
+                    ) : (
+                      <>“Recommendation: Award a single consolidated mandate to <span className="text-primary"> {current.vendor} </span> to simplify governance and maximize price leverage.”</>
+                    )}
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-4 mt-8">
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1 flex items-center gap-1.5">
+                        <Activity size={12} className="text-primary" /> Projected Savings
+                      </p>
+                      <p className="text-2xl font-black text-emerald-500">{current.savings}</p>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1 flex items-center gap-1.5">
+                        <Users size={12} className="text-indigo-500" /> Confidence Index
+                      </p>
+                      <p className="text-2xl font-black text-indigo-500">{current.confidence}%</p>
+                    </div>
+                  </div>
+               </div>
+             </div>
+
+             <div className="space-y-6">
+               <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                 <div className="w-4 h-[1px] bg-primary" /> Detailed Business Rationale
+               </h4>
+               <div className="grid grid-cols-1 gap-4">
+                 <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-3xl group/item hover:bg-emerald-50 transition-all">
+                   <div className="flex items-center justify-between mb-3">
+                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">✓ Profit & Performance Benefits</p>
+                     <CheckCircle2 size={16} className="text-emerald-500" />
+                   </div>
+                   <p className="text-sm text-emerald-900 font-medium leading-relaxed">{current.businessValue}</p>
+                 </div>
+                 <div className="p-6 bg-rose-50/50 border border-rose-100 rounded-3xl group/item hover:bg-rose-50 transition-all">
+                   <div className="flex items-center justify-between mb-3">
+                     <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest">⚠ Trade-offs & Risks</p>
+                     <Info size={16} className="text-rose-400" />
+                   </div>
+                   <p className="text-sm text-rose-900 font-medium leading-relaxed">{current.risk}</p>
+                 </div>
+               </div>
+             </div>
+           </div>
+
+           <div className="space-y-10">
+              <div className="bg-slate-50 border border-slate-100 rounded-[40px] p-10 shadow-inner">
+                <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest mb-8 flex items-center justify-between">
+                  <span>Capability Heatmap: {current.vendor}</span>
+                  <span className="text-[10px] text-slate-400">vs Competition</span>
+                </h4>
+                
+                <div className="space-y-8">
+                   {['Strategy', 'Media', 'Production', 'Compliance'].map(capability => {
+                     const score = current.vendor === bestCost.vendorName ? 85 : 92;
+                     return (
+                       <div key={capability} className="space-y-3">
+                         <div className="flex justify-between items-end">
+                           <p className="text-xs font-bold text-slate-700">{capability} Depth</p>
+                           <p className="text-xs font-black text-slate-900">{score}%</p>
+                         </div>
+                         <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                           <motion.div 
+                             initial={{ width: 0 }}
+                             animate={{ width: `${score}%` }}
+                             className={`h-full ${score > 90 ? 'bg-primary' : 'bg-indigo-400'}`}
+                            />
+                         </div>
+                       </div>
+                     );
+                   })}
+
+                   <div className="pt-8 border-t border-slate-200 space-y-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incremental ROI Benchmarks</p>
+                      <div className="flex gap-4">
+                        <div className="flex-1 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm text-center">
+                           <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Impact</p>
+                           <p className="text-lg font-black text-emerald-500">+18.4%</p>
+                        </div>
+                        <div className="flex-1 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm text-center">
+                           <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Launch Delay</p>
+                           <p className="text-lg font-black text-slate-900">0 Days</p>
+                        </div>
+                      </div>
+                   </div>
+                </div>
+              </div>
+
+              <div className="p-8 bg-slate-900 rounded-[40px] text-white relative overflow-hidden shadow-2xl">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 blur-[60px] rounded-full" />
+                 <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Strategic Summary</p>
+                 <p className="text-base font-medium leading-relaxed italic text-slate-300 relative z-10">
+                   "Selecting **{isSplitBetter ? `${bestCreative.vendorName} + ${bestMedia.vendorName}` : current.vendor}** leverages superior domain expertise while optimizing for {selectedScenario.toLowerCase()}. This choice balances aggressive SEA market reach with {current.confidence}% compliance certainty, ensuring a premium brand debut for NutriKid."
+                 </p>
+              </div>
+           </div>
+         </div>
+       </div>
+    </section>
+  );
+};
+
 const SidebarItem = ({ icon: Icon, label, active = false }: { icon: any, label: string, active?: boolean }) => (
   <a
     href="#"
@@ -654,13 +868,10 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                     </div>
                     <div>
                       <h3 className="font-bold text-sm text-slate-800">Scope of Work</h3>
-                      <p className="text-[10px] text-slate-500 font-medium">Statement of Work defining scope, objectives, and deliverables</p>
+                      <p className="text-[10px] text-slate-500 font-medium">Click any paragraph below to edit the SOW directly</p>
                     </div>
                   </div>
-                  <button className="flex items-center gap-2 py-2 px-5 bg-primary text-white rounded-full text-[11px] font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-all">
-                    <Sparkles size={14} />
-                    AI Assist
-                  </button>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full uppercase tracking-widest">✎ Editable</span>
                 </div>
 
                 <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-6">
@@ -689,20 +900,24 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                 <div className="p-6">
                   <motion.div
                     animate={{ height: isScopeExpanded ? 'auto' : '150px' }}
-                    className="w-full bg-slate-50/50 rounded-xl p-6 border border-slate-100 overflow-hidden relative"
+                    className="w-full bg-slate-50/50 rounded-xl border border-slate-100 overflow-hidden relative"
                   >
-                    <div className="text-sm text-slate-700 leading-relaxed space-y-4">
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="text-sm text-slate-700 leading-relaxed space-y-4 p-6 outline-none focus:bg-primary/5 focus:border-primary/20 rounded-xl transition-all"
+                    >
                       <p>The selected vendor(s) will support the global launch of a new kids health drink across strategy, creative development, film production, social activation and compliance review. The scope is intentionally structured to allow either a single integrated award or a multi-vendor award by workstream.</p>
-                      <p><strong>1. Strategy & Creative Development:</strong> Develop launch strategy, audience understanding, positioning, campaign idea, messaging architecture and master visual direction suitable for parents, families and child-safe communication environments. Deliverables include strategic narrative, creative territory options, key visuals, copy routes and channel adaptation guidance.</p>
+                      <p><strong>1. Strategy &amp; Creative Development:</strong> Develop launch strategy, audience understanding, positioning, campaign idea, messaging architecture and master visual direction suitable for parents, families and child-safe communication environments. Deliverables include strategic narrative, creative territory options, key visuals, copy routes and channel adaptation guidance.</p>
                       <p><strong>2. TVC Development:</strong> Create the flagship film idea and all pre-production materials including scripts, storyboard, animatic, packshot plan, supers and production approach. Concepts must be suitable for a kids/family product and avoid unsupported product or health claims.</p>
                       <p><strong>3. TVC Production:</strong> Execute end-to-end film production, including pre-production, casting, shoot, post-production, finishing and final delivery of master and cutdown assets. Vendors must account for child talent safety, usage rights, market-ready master files and trafficking-ready outputs.</p>
                       <p><strong>4. Social Organic:</strong> Build a launch-phase organic social content plan for Meta, YouTube and TikTok. Deliver content calendars, platform-adapted assets, copy and publishing guidance aligned to the campaign idea and local sensitivities for child-directed communications.</p>
                       <p><strong>5. Social Paid:</strong> Provide paid media planning and/or activation services across Meta, YouTube and TikTok. Plans should prioritize age-appropriate placements, parent/co-viewing audiences, launch objectives, reporting cadence and optimization logic. If media buying is proposed, agency fees must be clearly separated from pass-through media spend.</p>
-                      <p><strong>6. Kids Advertising & Claims Compliance Review:</strong> Review scripts, visuals, videos, copy and product-related claims against applicable advertising standards, child-marketing restrictions, nutrition/health claim guardrails and platform policies. Compliance notes should be practical, market-aware and timed to avoid launch delay.</p>
+                      <p><strong>6. Kids Advertising &amp; Claims Compliance Review:</strong> Review scripts, visuals, videos, copy and product-related claims against applicable advertising standards, child-marketing restrictions, nutrition/health claim guardrails and platform policies. Compliance notes should be practical, market-aware and timed to avoid launch delay.</p>
                       <p><strong>7. Program Management:</strong> Manage project timelines, approvals, stakeholder coordination, version control and final asset delivery across all awarded workstreams.</p>
                       <p>All vendors must clearly specify what is included, excluded, dependent on client inputs and subject to third-party pass-through costs. Commercial submissions should map directly to the 8 RFQ line items and maintain the same line-item structure in the response.</p>
                     </div>
-                    {!isScopeExpanded && <div className="absolute bottom-0 left-0 w-full h-20 bg-gradient-to-t from-slate-50 to-transparent" />}
+                    {!isScopeExpanded && <div className="absolute bottom-0 left-0 w-full h-20 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none" />}
                   </motion.div>
                 </div>
 
@@ -1208,29 +1423,35 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                       )}
                     </div>
 
-                    {/* Right Side: Document Preview (Synchronized with Selected Vendor) */}
-                    <div className="h-[800px] flex flex-col gap-4">
-                      {uploadedFiles.length > 0 && (
-                        <>
-                          <div className="bg-white/5 p-3 rounded-xl flex items-center gap-3">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Interactive Preview:</span>
-                            <div className="flex-1 overflow-x-auto no-scrollbar flex items-center gap-2">
-                              {uploadedFiles.map((f, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => setSelectedFileIdx(i)}
-                                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all whitespace-nowrap ${selectedFileIdx === i ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white/10 text-slate-400 hover:bg-white/20'}`}
-                                >
-                                  {f.name}
-                                </button>
-                              ))}
+                    {/* Right Side: Vendor Summary Cards */}
+                    <div className="flex flex-col gap-4">
+                      {extractedData?.reports ? (
+                        extractedData.reports.map((r: any, i: number) => (
+                          <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h5 className="text-sm font-black text-white">{r.vendorName}</h5>
+                              <span className={`text-xs font-black px-2 py-1 rounded-lg ${
+                                (r.overallSowAlignment ?? 0) >= 80 ? 'bg-emerald-500/20 text-emerald-400' :
+                                (r.overallSowAlignment ?? 0) >= 50 ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400'
+                              }`}>{r.overallSowAlignment ?? '—'}% SOW</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div className="bg-white/5 rounded-lg p-2">
+                                <p className="text-slate-500 font-bold uppercase">Total Cost</p>
+                                <p className="text-white font-black">${(r.totalCost / 1000).toFixed(0)}K</p>
+                              </div>
+                              <div className="bg-white/5 rounded-lg p-2">
+                                <p className="text-slate-500 font-bold uppercase">Avg Score</p>
+                                <p className="text-white font-black">{((Object.values(r.scores || {}) as number[]).reduce((a,b)=>a+b,0)/8).toFixed(1)}/10</p>
+                              </div>
                             </div>
                           </div>
-                          <DocumentViewer
-                            file={uploadedFiles[selectedFileIdx]}
-                            activePage={activePage}
-                          />
-                        </>
+                        ))
+                      ) : (
+                        <div className="bg-white/5 border border-dashed border-white/10 rounded-2xl p-8 text-center">
+                          <Bot size={32} className="text-slate-600 mx-auto mb-2 animate-pulse" />
+                          <p className="text-xs text-slate-500 font-bold">Run AI Analysis to see vendor summaries</p>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1385,35 +1606,11 @@ Provide a high-level executive summary of the comparison and a recommendation.`;
                 </section>
               </div>
 
-              <section className="bg-white rounded-[40px] p-12 border border-slate-200 relative overflow-hidden group shadow-2xl">
-                 <div className="absolute top-0 right-0 p-8 opacity-5 rotate-12 group-hover:scale-110 transition-transform">
-                   <Sparkles size={200} className="text-primary" />
-                 </div>
-                 <div className="max-w-3xl relative z-10">
-                   <span className="bg-primary text-white text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest mb-6 inline-block shadow-lg shadow-primary/20">AI Recommendation</span>
-                   <h3 className="text-4xl font-black text-slate-900 mb-6 leading-tight">
-                    Selection Strategy: <span className="text-primary">{extractedData ? "Optimized Multi-Award" : "Split Award Model"}</span>
-                   </h3>
-                   <div className="space-y-6 text-slate-900 leading-relaxed text-lg font-medium">
-                     {extractedData?.reports ? (
-                        <p>Our dynamic vendor analysis identifies **{costData[0]?.name || 'a vendor'}** as a high-potential partner. We recommend awarding workstreams based on the technical scores and cost efficiencies highlighted above to maximize overall ROI.</p>
-                     ) : (
-                        <p>Based on technical scoring, **Nexus Creative** leads in Strategy & Creative (9.4/10), while **Velocity Studios** offers superior value for TVC Production (saves $86k vs Hub). We recommend awarding Creative workstreams to Nexus and Production to Velocity for a **composite savings of 14.8%** without quality degradation.</p>
-                     )}
-                     <div className="flex items-center gap-8 pt-6">
-                        <div>
-                          <p className="text-[10px] font-black text-primary uppercase mb-1">Impact Level</p>
-                          <p className="text-xl font-bold text-slate-900">{extractedData ? "Transformation" : "Strategic"}</p>
-                        </div>
-                        <div className="h-10 w-[1px] bg-slate-200" />
-                        <div>
-                          <p className="text-[10px] font-black text-primary uppercase mb-1">Time to Award</p>
-                          <p className="text-xl font-bold text-slate-900">48 Hours</p>
-                        </div>
-                     </div>
-                   </div>
-                 </div>
-              </section>
+              <StrategyRecommendation
+                extractedData={extractedData}
+                costData={costData}
+                radarData={radarData}
+              />
 
               <div className="flex justify-start py-8">
                 <button
