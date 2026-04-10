@@ -38,6 +38,13 @@ import {
   Activity,
   BarChart
 } from 'lucide-react';
+
+/** FastAPI analysis server base (no trailing slash). In Docker, nginx serves under /api/analysis/. */
+const ANALYSIS_SERVER =
+  import.meta.env.VITE_ANALYSIS_SERVER ?? 'http://localhost:8765';
+/** Ollama /api/chat URL. In Docker, use /api/ollama/api/chat (same-origin via nginx). */
+const OLLAMA_CHAT_URL =
+  import.meta.env.VITE_OLLAMA_CHAT_URL ?? 'http://localhost:11434/api/chat';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
   BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
@@ -551,7 +558,6 @@ export default function App() {
     if (!projectBrief.trim()) return;
     setIsGenerating(true);
     try {
-      const OLLAMA_URL = "http://localhost:11434/api/chat";
       const MODEL_NAME = "kimi-k2-thinking:cloud";
 
       const prompt = `Based on the following project brief, generate 4 critical procurement questionnaire questions (maximum 2 sentences each) that a vendor must answer. 
@@ -567,7 +573,7 @@ Example format:
   ...
 ]`;
 
-      const response = await fetch(OLLAMA_URL, {
+      const response = await fetch(OLLAMA_CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -598,7 +604,6 @@ Example format:
       setIsGenerating(false);
     }
   };
-  const ANALYSIS_SERVER = "http://localhost:8765";
 
   const analyzeSingleDocument = async (file: File) => {
     // Ping the analysis server first
@@ -666,14 +671,13 @@ Example format:
 
       // Phase 2: Final Aggregation (Comparison Summary)
       const MODEL_NAME = "kimi-k2-thinking:cloud";
-      const OLLAMA_URL = "http://localhost:11434/api/chat";
-      
+
       const aggregationPrompt = `Compare following vendor reports for NutriKid:
 ${successfulReports.map(r => `- ${r.vendorName}: Cost $${r.totalCost}, Avg Score: ${(Object.values(r.scores as Record<string, number>).reduce((acc: number, val: number) => acc + (val || 0), 0) / 8).toFixed(1)}`).join('\n')}
 
 Provide a high-level executive summary of the comparison and a recommendation.`;
 
-      const aggResponse = await fetch(OLLAMA_URL, {
+      const aggResponse = await fetch(OLLAMA_CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
