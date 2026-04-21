@@ -4,11 +4,12 @@ docling
 ollama
 pydantic
 python-multipart
-requests
-deepsearch-glm[toolkit]
+requests>=2.32.3
+deepsearch-glm[toolkit]==0.26.2
 langextract
 PyPDF2
 # Force CPU-only PyTorch wheels (prevents huge CUDA toolkit deps in containers)
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision
+
