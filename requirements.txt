@@ -5,7 +5,7 @@ ollama
 pydantic
 python-multipart
 requests>=2.32.3
-deepsearch-glm[toolkit]==0.26.2
+deepsearch-glm[toolkit]
 langextract
 PyPDF2
 # Force CPU-only PyTorch wheels (prevents huge CUDA toolkit deps in containers)
