@@ -1,12 +1,29 @@
+# Dependency directories
 node_modules
 dist
-.git
+**/node_modules
+**/dist
+
+# Python artifacts
 **/.venv
 **/__pycache__
 *.pyc
-.env
-.env.*
-!.env.example
-*.md
+.pytest_cache
+
+# Version control and editor settings
+.git
 .cursor
 .vscode
+
+# Environment files
+.env
+.env.*
+
+# Documentation and metadata
+*.md
+LICENSE
+.gitignore
+
+# Docker specific
+docker-compose.yml
+Dockerfile

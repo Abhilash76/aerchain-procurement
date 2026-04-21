@@ -1,9 +1,12 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.10-slim-bookworm
 
-ENV PYTHONUNBUFFERED=1
+# Standardize environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
+# Install system dependencies for document parsing and OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -11,14 +14,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements file
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download models to avoid timeouts on first run
+# 1. Upgrade pip
+# 2. Install compatible CPU-only Torch and Torchvision
+# 3. Install the rest of the requirements
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch==2.2.1 torchvision==0.17.1 --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Pre-download Docling models to the image layer
 RUN python -c "from docling.document_converter import DocumentConverter; DocumentConverter()"
 
+# Copy the rest of the scripts
 COPY . .
 
+# Match the port in your analysis_server logic
 EXPOSE 8765
 
 CMD ["uvicorn", "index:app", "--host", "0.0.0.0", "--port", "8765"]
