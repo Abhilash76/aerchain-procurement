@@ -1,0 +1,46 @@
+{
+  "hash": "b0096e2e",
+  "configHash": "a2665c4c",
+  "lockfileHash": "55059937",
+  "browserHash": "8527b2cc",
+  "optimized": {
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "dfe93d92",
+      "needsInterop": false
+    },
+    "motion/react": {
+      "src": "../../node_modules/motion/dist/es/react.mjs",
+      "file": "motion_react.js",
+      "fileHash": "5216640b",
+      "needsInterop": false
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "2a713bf2",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "7d4f00ae",
+      "needsInterop": true
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "eb9c64be",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-O5BR4D4V": {
+      "file": "chunk-O5BR4D4V.js"
+    },
+    "chunk-354VVPGE": {
+      "file": "chunk-354VVPGE.js"
+    }
+  }
+}
