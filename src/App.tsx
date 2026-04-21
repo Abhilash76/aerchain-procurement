@@ -558,7 +558,7 @@ export default function App() {
     if (!projectBrief.trim()) return;
     setIsGenerating(true);
     try {
-      const MODEL_NAME = "kimi-k2-thinking:cloud";
+      const MODEL_NAME = "kimi-k2.5:cloud";
 
       const prompt = `Based on the following project brief, generate 4 critical procurement questionnaire questions (maximum 2 sentences each) that a vendor must answer. 
 Focus on technical methodology, compliance, and risk management.
@@ -670,7 +670,7 @@ Example format:
       }
 
       // Phase 2: Final Aggregation (Comparison Summary)
-      const MODEL_NAME = "kimi-k2-thinking:cloud";
+      const MODEL_NAME = "kimi-k2.5:cloud";
 
       const aggregationPrompt = `Compare following vendor reports for NutriKid:
 ${successfulReports.map(r => `- ${r.vendorName}: Cost $${r.totalCost}, Avg Score: ${(Object.values(r.scores as Record<string, number>).reduce((acc: number, val: number) => acc + (val || 0), 0) / 8).toFixed(1)}`).join('\n')}

@@ -160,7 +160,7 @@ TASK:
         )
         
         config = lx.factory.ModelConfig(
-            model_id="kimi-k2-thinking:cloud", 
+            model_id="kimi-k2.5:cloud", 
             provider_kwargs={"base_url": os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434")}
         )
 

@@ -49,7 +49,7 @@ From repo root:
 
 ### If the docker build fails
 
-1. Run the code locally by ensuring that Ollama is running on your machine and the model 'kimi-k2-thinking:cloud' is pulled.
+1. Run the code locally by ensuring that Ollama is running on your machine and the model 'kimi-k2.5:cloud' is pulled.
 2. Run the following commands:
    - `pip install -r requirements.txt`
    - `npm run dev`

@@ -4,7 +4,7 @@ docling
 ollama
 pydantic
 python-multipart==0.0.9
-requests==2.31.0
+requests
 deepsearch-glm[toolkit]
 langextract
 PyPDF2
